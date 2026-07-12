@@ -1,0 +1,37 @@
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="Desktop Server">
+        <EditTextPreference
+            app:defaultValue="192.168.1.241:8080"
+            app:key="desktop_server_url"
+            app:singleLine="true"
+            app:title="Server URL"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="MQTT Settings">
+        <EditTextPreference
+            app:defaultValue="tcp://broker.emqx.io:1883"
+            app:key="mqtt_broker"
+            app:singleLine="true"
+            app:title="MQTT Broker"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            app:defaultValue="sunmi/print"
+            app:key="mqtt_topic"
+            app:singleLine="true"
+            app:title="MQTT Topic"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="Print Settings">
+        <EditTextPreference
+            app:defaultValue="3"
+            app:key="default_lines_after"
+            app:singleLine="true"
+            app:title="Lines After Content"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

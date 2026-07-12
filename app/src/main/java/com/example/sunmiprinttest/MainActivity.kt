@@ -1,5 +1,7 @@
 package com.example.sunmiprinttest
 
+import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -18,6 +20,8 @@ import android.text.style.AbsoluteSizeSpan
 import android.text.style.AlignmentSpan
 import android.text.style.StyleSpan
 import android.view.Gravity
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.widget.AdapterView
 import android.widget.Button
@@ -27,23 +31,27 @@ import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.preference.PreferenceManager
+import androidx.appcompat.widget.Toolbar
 import com.google.gson.Gson
 import com.sunmi.peripheral.printer.InnerPrinterCallback
 import com.sunmi.peripheral.printer.InnerPrinterException
 import com.sunmi.peripheral.printer.InnerPrinterManager
 import com.sunmi.peripheral.printer.InnerResultCallback
 import com.sunmi.peripheral.printer.SunmiPrinterService
+import fi.iki.elonen.NanoHTTPD
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
 import org.eclipse.paho.client.mqttv3.MqttCallback
 import org.eclipse.paho.client.mqttv3.MqttClient
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions
 import org.eclipse.paho.client.mqttv3.MqttMessage
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
-import fi.iki.elonen.NanoHTTPD
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.NetworkInterface
+import java.net.ServerSocket
 import java.net.Socket
 import java.text.SimpleDateFormat
 import java.util.Collections
@@ -57,15 +65,14 @@ class MainActivity : AppCompatActivity() {
     private var tcpSocket: Socket? = null
     private var mqttClient: MqttClient? = null
     private var httpServer: AppHttpServer? = null
+    private var escPosServer: EscPosServer? = null
     private val gson = Gson()
+    private lateinit var prefs: SharedPreferences
 
     private lateinit var statusText: TextView
-    private lateinit var serverUrlField: EditText
     private lateinit var btnConnect: Button
     private lateinit var httpServerInfo: TextView
-    private lateinit var mqttBrokerField: EditText
-    private lateinit var mqttTopicField: EditText
-    private lateinit var btnMqttConnect: Button
+    private lateinit var tcpServerInfo: TextView
     private lateinit var printButton: Button
     private lateinit var titleField: EditText
     private lateinit var titleSizeField: EditText
@@ -74,7 +81,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var textSizeField: EditText
     private lateinit var printModeSpinner: Spinner
     private lateinit var alignmentSpinner: Spinner
-    private lateinit var linesAfterField: EditText
     private lateinit var livePreview: TextView
     private lateinit var testEmojiButton: Button
 
@@ -102,6 +108,8 @@ class MainActivity : AppCompatActivity() {
         val type: String? = null,
         val title: String? = null,
         val content: String? = null,
+        val text: String? = null, // Support for ha-receipt_printer key
+        val message: String? = null, // Alternative common key
         val titleSize: Int? = null,
         val contentSize: Int? = null,
         val centerTitle: Boolean? = null,
@@ -113,14 +121,16 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+        
+        val toolbar: Toolbar = findViewById(R.id.toolbar)
+        setSupportActionBar(toolbar)
+
+        prefs = PreferenceManager.getDefaultSharedPreferences(this)
 
         statusText = findViewById(R.id.statusText)
-        serverUrlField = findViewById(R.id.serverUrlField)
         btnConnect = findViewById(R.id.btnConnect)
         httpServerInfo = findViewById(R.id.httpServerInfo)
-        mqttBrokerField = findViewById(R.id.mqttBrokerField)
-        mqttTopicField = findViewById(R.id.mqttTopicField)
-        btnMqttConnect = findViewById(R.id.btnMqttConnect)
+        tcpServerInfo = findViewById(R.id.tcpServerInfo)
         printButton = findViewById(R.id.btnPrint)
         titleField = findViewById(R.id.titleField)
         titleSizeField = findViewById(R.id.titleSizeField)
@@ -129,28 +139,48 @@ class MainActivity : AppCompatActivity() {
         textSizeField = findViewById(R.id.textSizeField)
         printModeSpinner = findViewById(R.id.printModeSpinner)
         alignmentSpinner = findViewById(R.id.alignmentSpinner)
-        linesAfterField = findViewById(R.id.linesAfterField)
         livePreview = findViewById(R.id.livePreview)
+        testEmojiButton = findViewById(R.id.btnTestEmoji)
+
         livePreview.movementMethod = ScrollingMovementMethod()
-        livePreview.setOnTouchListener { v, event ->
+        livePreview.setOnTouchListener { v, _ ->
             v.parent.requestDisallowInterceptTouchEvent(true)
             false
         }
-        testEmojiButton = findViewById(R.id.btnTestEmoji)
 
         btnConnect.setOnClickListener { toggleConnection() }
-        btnMqttConnect.setOnClickListener { toggleMqtt() }
         setupLivePreview()
         printButton.setOnClickListener { printFromFields() }
         testEmojiButton.setOnClickListener { printThreeSmileyFaces() }
 
         startHttpServer()
+        startEscPosServer()
+        autoConnectMqtt()
 
         try {
             InnerPrinterManager.getInstance().bindService(this, printerCallback)
         } catch (e: InnerPrinterException) {
             statusText.text = getString(R.string.status_error, e.message)
         }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        menuInflater.inflate(R.menu.main_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        when (item.itemId) {
+            R.id.action_settings -> {
+                startActivity(Intent(this, SettingsActivity::class.java))
+                return true
+            }
+            R.id.action_logs -> {
+                startActivity(Intent(this, LogsActivity::class.java))
+                return true
+            }
+        }
+        return super.onOptionsItemSelected(item)
     }
 
     private fun startHttpServer() {
@@ -161,6 +191,20 @@ class MainActivity : AppCompatActivity() {
             httpServer?.start()
         } catch (e: Exception) {
             httpServerInfo.text = "HTTP Server Error: ${e.message}"
+        }
+    }
+
+    private fun startEscPosServer() {
+        val ip = getLocalIpAddress()
+        tcpServerInfo.text = "TCP ESC/POS: $ip:9100"
+        escPosServer = EscPosServer(9100)
+        escPosServer?.start()
+    }
+
+    private fun autoConnectMqtt() {
+        val broker = prefs.getString("mqtt_broker", "")
+        if (!broker.isNullOrEmpty()) {
+            thread { connectMqtt() }
         }
     }
 
@@ -257,65 +301,126 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun toggleMqtt() {
-        if (mqttClient == null || !mqttClient!!.isConnected) {
-            val broker = mqttBrokerField.text.toString()
-            val topic = mqttTopicField.text.toString()
-            if (broker.isEmpty()) return
+    inner class EscPosServer(private val port: Int) {
+        private var serverSocket: ServerSocket? = null
+        private var running = false
 
+        fun start() {
+            running = true
             thread {
                 try {
-                    val clientId = "SunmiPrinter_" + System.currentTimeMillis()
-                    mqttClient = MqttClient(broker, clientId, MemoryPersistence())
-                    val options = MqttConnectOptions()
-                    options.isCleanSession = true
-                    
-                    mqttClient?.setCallback(object : MqttCallback {
-                        override fun connectionLost(cause: Throwable?) {
-                            runOnUiThread { 
-                                btnMqttConnect.text = "M-Conn"
-                                Toast.makeText(this@MainActivity, "MQTT Lost", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-
-                        override fun messageArrived(topic: String?, message: MqttMessage?) {
-                            val payload = message?.toString() ?: return
-                            try {
-                                val job = gson.fromJson(payload, PrintJob::class.java)
-                                runOnUiThread { remotePrint(job) }
-                            } catch (e: Exception) {
-                                runOnUiThread { remotePrint(PrintJob(content = payload)) }
-                            }
-                        }
-
-                        override fun deliveryComplete(token: IMqttDeliveryToken?) {}
-                    })
-
-                    mqttClient?.connect(options)
-                    mqttClient?.subscribe(topic)
-
-                    runOnUiThread {
-                        btnMqttConnect.text = "M-Disc"
-                        Toast.makeText(this@MainActivity, "MQTT Connected", Toast.LENGTH_SHORT).show()
+                    serverSocket = ServerSocket().apply {
+                        reuseAddress = true
+                        bind(InetSocketAddress(port))
+                    }
+                    LogManager.addLog("ESC/POS Server started on port $port")
+                    while (running) {
+                        val client = serverSocket?.accept() ?: break
+                        LogManager.addLog("Client connected: ${client.inetAddress.hostAddress}")
+                        handleClient(client)
                     }
                 } catch (e: Exception) {
-                    runOnUiThread { Toast.makeText(this@MainActivity, "MQTT Error: ${e.message}", Toast.LENGTH_LONG).show() }
+                    LogManager.addLog("ESC/POS Server Error: ${e.message}")
                 }
             }
-        } else {
+        }
+
+        private fun handleClient(socket: Socket) {
             thread {
-                mqttClient?.disconnect()
-                runOnUiThread { btnMqttConnect.text = "M-Conn" }
+                try {
+                    socket.soTimeout = 5000 // 5 second timeout for reading
+                    val inputStream = socket.getInputStream()
+                    val outputStream = SpannableStringBuilder()
+                    val buffer = ByteArray(8192)
+                    
+                    var bytesRead: Int
+                    while (true) {
+                        bytesRead = inputStream.read(buffer)
+                        if (bytesRead == -1) break
+                        
+                        val chunk = buffer.copyOfRange(0, bytesRead)
+                        LogManager.addLog("Received $bytesRead bytes")
+                        
+                        // Extraction: Filter for printable text and newlines
+                        val text = chunk.map { 
+                            val b = it.toInt() and 0xFF
+                            if (b in 32..126 || b == 10 || b == 13) b.toChar() else ' ' 
+                        }
+                            .joinToString("")
+                        
+                        outputStream.append(text)
+                        
+                        // If we haven't received anything for a bit, consider it a complete job
+                        if (inputStream.available() == 0) {
+                            Thread.sleep(100) // Small wait for any trailing packets
+                            if (inputStream.available() == 0) break
+                        }
+                    }
+                    
+                    val finalContent = outputStream.toString().replace(Regex("\\s+"), " ").trim()
+                    if (finalContent.isNotEmpty()) {
+                        LogManager.addLog("Print job: ${finalContent.take(30)}...")
+                        runOnUiThread { remotePrint(PrintJob(content = finalContent)) }
+                    } else {
+                        LogManager.addLog("No printable text found in data stream")
+                    }
+                } catch (e: Exception) {
+                    LogManager.addLog("Client error: ${e.message}")
+                } finally {
+                    try { socket.close() } catch (e: Exception) {}
+                    LogManager.addLog("Connection closed")
+                }
             }
+        }
+
+        fun stop() {
+            running = false
+            try { serverSocket?.close() } catch (e: Exception) {}
+        }
+    }
+
+    private fun connectMqtt() {
+        val broker = prefs.getString("mqtt_broker", "") ?: return
+        val topic = prefs.getString("mqtt_topic", "sunmi/print") ?: "sunmi/print"
+        
+        try {
+            val clientId = "SunmiPrinter_" + System.currentTimeMillis()
+            mqttClient = MqttClient(broker, clientId, MemoryPersistence())
+            val options = MqttConnectOptions()
+            options.isCleanSession = true
+            
+            mqttClient?.setCallback(object : MqttCallback {
+                override fun connectionLost(cause: Throwable?) {
+                    LogManager.addLog("MQTT connection lost: ${cause?.message}")
+                    thread { Thread.sleep(5000); connectMqtt() } // Auto-reconnect
+                }
+
+                override fun messageArrived(topic: String?, message: MqttMessage?) {
+                    val payload = message?.toString() ?: return
+                    LogManager.addLog("MQTT message received on topic $topic")
+                    try {
+                        val job = gson.fromJson(payload, PrintJob::class.java)
+                        runOnUiThread { remotePrint(job) }
+                    } catch (e: Exception) {
+                        runOnUiThread { remotePrint(PrintJob(content = payload)) }
+                    }
+                }
+
+                override fun deliveryComplete(token: IMqttDeliveryToken?) {}
+            })
+
+            mqttClient?.connect(options)
+            mqttClient?.subscribe(topic)
+            LogManager.addLog("Connected to MQTT broker: $broker")
+        } catch (e: Exception) {
+            LogManager.addLog("MQTT Connection Error: ${e.message}")
         }
     }
 
     private fun toggleConnection() {
         if (tcpSocket == null || tcpSocket?.isClosed == true) {
-            val input = serverUrlField.text.toString()
-            if (input.isEmpty()) return
-            
-            val parts = input.split(":")
+            val url = prefs.getString("desktop_server_url", "192.168.1.241:8080") ?: return
+            val parts = url.split(":")
             val ip = parts[0]
             val port = if (parts.size > 1) parts[1].toInt() else 8080
 
@@ -323,10 +428,8 @@ class MainActivity : AppCompatActivity() {
                 try {
                     val socket = Socket(ip, port)
                     tcpSocket = socket
-                    runOnUiThread { 
-                        btnConnect.text = "Disconnect"
-                        Toast.makeText(this, "Connected to $ip", Toast.LENGTH_SHORT).show() 
-                    }
+                    runOnUiThread { btnConnect.text = "Disconnect" }
+                    LogManager.addLog("Connected to desktop server at $ip")
 
                     val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
                     while (true) {
@@ -339,8 +442,9 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 } catch (e: Exception) {
+                    LogManager.addLog("Desktop server connection failed: ${e.message}")
                     runOnUiThread { 
-                        Toast.makeText(this, "Connection failed: ${e.message}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(this, "Desktop connection failed", Toast.LENGTH_SHORT).show()
                     }
                 } finally {
                     runOnUiThread {
@@ -354,6 +458,7 @@ class MainActivity : AppCompatActivity() {
                 tcpSocket?.close()
                 tcpSocket = null
                 runOnUiThread { btnConnect.text = "Connect" }
+                LogManager.addLog("Disconnected from desktop server")
             }
         }
     }
@@ -438,7 +543,7 @@ class MainActivity : AppCompatActivity() {
             val content = inputField.text.toString()
             val titleSize = titleSizeField.text.toString().toIntOrNull() ?: 32
             val contentSize = textSizeField.text.toString().toIntOrNull() ?: 26
-            val linesAfter = linesAfterField.text.toString().toIntOrNull() ?: 3
+            val linesAfter = prefs.getString("default_lines_after", "3")?.toIntOrNull() ?: 3
             val isTitleCentered = centerTitleCheckBox.isChecked
             val bodyAlignment = if (alignmentSpinner.selectedItemPosition == 1) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
 
@@ -489,24 +594,20 @@ class MainActivity : AppCompatActivity() {
 
         // First Dash
         appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20)
-        appendCentered("\n", 5) // Symmetric vertical padding
+        appendCentered("\n", 5)
         appendCentered("${content.trim()}\n", 50, true)
-        appendCentered("\n", 5) // Symmetric vertical padding
+        appendCentered("\n", 5)
         appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20)
         
-        appendCentered("\n", 15) // Spacer
-        
-        // Info Section between asterisks
+        appendCentered("\n", 15)
         appendCentered("* * * * * * *\n", 20)
-        appendCentered("\n", 5) // Symmetric vertical padding
+        appendCentered("\n", 5)
         appendCentered("unknown\n", 26)
         appendCentered("sent: $sent\nrecv: $now\n", 22)
-        appendCentered("\n", 5) // Symmetric vertical padding
+        appendCentered("\n", 5)
         appendCentered("* * * * * * *\n", 20)
         
-        appendCentered("\n", 15) // Spacer
-        
-        // Footer section
+        appendCentered("\n", 15)
         appendCentered("Thank you for using B.A.N.U.S.U.G.E\n", 26)
         appendCentered("(Background Alert Notification Utility for Security Updates & General Events)\n", 14)
         
@@ -515,14 +616,14 @@ class MainActivity : AppCompatActivity() {
 
     private fun remotePrint(job: PrintJob) {
         if (job.type == "alert") {
-            val builder = generateBanuSugeAlertBuilder(job.content ?: "6666", job.timestamp)
+            val builder = generateBanuSugeAlertBuilder(job.content ?: job.text ?: job.message ?: "6666", job.timestamp)
             renderAndPrint(builder, 3)
             return
         }
 
         val builder = SpannableStringBuilder()
         val title = job.title ?: ""
-        val content = job.content ?: ""
+        val content = job.content ?: job.text ?: job.message ?: ""
         val titleSize = job.titleSize ?: 32
         val contentSize = job.contentSize ?: 26
         val linesAfter = job.linesAfter ?: 3
@@ -575,7 +676,7 @@ class MainActivity : AppCompatActivity() {
                 isAntiAlias = true
             }
             
-            // Explicitly force center alignment for alerts if detected in spans
+            // Check if any AlignmentSpan is present to decide on base alignment
             val alignmentSpans = builder.getSpans(0, builder.length, AlignmentSpan::class.java)
             val baseAlignment = if (alignmentSpans.any { it.alignment == Layout.Alignment.ALIGN_CENTER }) {
                 Layout.Alignment.ALIGN_CENTER
@@ -654,6 +755,7 @@ class MainActivity : AppCompatActivity() {
         tcpSocket?.close()
         mqttClient?.disconnect()
         httpServer?.stop()
+        escPosServer?.stop()
         try {
             InnerPrinterManager.getInstance().unBindService(this, printerCallback)
         } catch (e: InnerPrinterException) {
