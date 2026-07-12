@@ -776,6 +776,7 @@ class MainActivity : AppCompatActivity() {
         val priceRowSize = 24
         val qtyRowSize = 24
         val totalSize = 30
+        val footerSize = 24
         val ruleWidth = monoCharsPerLine(bodySize)
         val priceRowWidth = monoCharsPerLine(priceRowSize)
         val totalWidth = monoCharsPerLine(totalSize)
@@ -807,8 +808,10 @@ class MainActivity : AppCompatActivity() {
         val totalEnd = builder.length
         builder.append(padRow("Cash", formatMoney(total), ruleWidth)).append("\n")
         builder.append(rule).append("\n")
+        val footerStart = builder.length
         builder.append(now).append("\n")
         builder.append(receiptNumber)
+        val footerEnd = builder.length
         val bodyEnd = builder.length
 
         builder.setSpan(AbsoluteSizeSpan(bodySize), bodyStart, bodyEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -816,6 +819,7 @@ class MainActivity : AppCompatActivity() {
         builder.setSpan(alignNormal(), bodyStart, bodyEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         builder.setSpan(AbsoluteSizeSpan(priceRowSize), priceRowStart, priceRowEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         builder.setSpan(AbsoluteSizeSpan(qtyRowSize), qtyRowStart, qtyRowEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(AbsoluteSizeSpan(footerSize), footerStart, footerEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         builder.setSpan(AbsoluteSizeSpan(totalSize), totalStart, totalEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         builder.setSpan(StyleSpan(Typeface.BOLD), totalStart, totalEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
 
