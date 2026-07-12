@@ -684,7 +684,7 @@ class MainActivity : AppCompatActivity() {
         if (content.isNotEmpty()) {
             val start = builder.length
             if (type == "list") {
-                content.split("\n").forEach { line ->
+                content.split("\n").filter { it.isNotBlank() }.forEach { line ->
                     val lineStart = builder.length; builder.append("• ").append(line).append("\n")
                     builder.setSpan(AbsoluteSizeSpan(contentSize), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                     builder.setSpan(AlignmentSpan.Standard(alignment), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
