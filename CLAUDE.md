@@ -164,6 +164,19 @@ Failed if a fault shows up at any point during that window. This is a best-effor
 "print finished," not an authoritative signal — tune those constants if jobs are logged as
 succeeding despite visible physical failures, or failing despite a clean print.
 
+### Entrance receipts
+
+Unlike `LogManager`/`JobLogManager` (in-memory ring buffers, lost on restart), `EntranceReceiptManager`
+persists every `guard_receipt` print as JSON (via Gson) in the app's default `SharedPreferences` —
+these represent real money collected at a door, so they must survive an app restart and are never
+auto-evicted. `generateGuardReceiptBuilder()` calls `EntranceReceiptManager.addReceipt(...)` each
+time it prints; `EntranceReceiptsActivity` ("Entrance Receipts" in the toolbar menu) lists every
+receipt newest-first with a `Paid` checkbox per row (green background when checked, red when not)
+that calls `EntranceReceiptManager.setPaid(...)` immediately on toggle. All functions take the
+`SharedPreferences` instance as a parameter rather than the manager holding its own reference, so
+both `MainActivity` and `EntranceReceiptsActivity` share the same underlying storage without needing
+an explicit `init(context)` call.
+
 ## Technical constraints
 
 - Native print width is fixed at **384px**; all rendering targets this width.

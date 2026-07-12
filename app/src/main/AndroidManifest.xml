@@ -35,6 +35,10 @@
             android:name=".JobLogsActivity"
             android:label="Job Logs"
             android:parentActivityName=".MainActivity" />
+        <activity
+            android:name=".EntranceReceiptsActivity"
+            android:label="Entrance Receipts"
+            android:parentActivityName=".MainActivity" />
     </application>
 
 </manifest>

@@ -10,6 +10,10 @@
         android:title="Job Logs"
         app:showAsAction="never" />
     <item
+        android:id="@+id/action_entrance_receipts"
+        android:title="Entrance Receipts"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_settings"
         android:title="Settings"
         app:showAsAction="never" />

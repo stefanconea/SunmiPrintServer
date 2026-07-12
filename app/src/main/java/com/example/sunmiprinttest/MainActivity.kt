@@ -229,6 +229,10 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(this, JobLogsActivity::class.java))
                 return true
             }
+            R.id.action_entrance_receipts -> {
+                startActivity(Intent(this, EntranceReceiptsActivity::class.java))
+                return true
+            }
         }
         return super.onOptionsItemSelected(item)
     }
@@ -775,6 +779,8 @@ class MainActivity : AppCompatActivity() {
 
         val sdf = SimpleDateFormat("dd-MM-yyyy hh:mm a", Locale.getDefault())
         val now = sdf.format(Date())
+        val receiptNumber = "#1-%04d".format(counter)
+        EntranceReceiptManager.addReceipt(prefs, counter, receiptNumber, now, total)
 
         val bodySize = 22
         val priceRowSize = 24
@@ -812,7 +818,7 @@ class MainActivity : AppCompatActivity() {
         builder.append(padRow("Cash", formatMoney(total), ruleWidth)).append("\n")
         builder.append(rule).append("\n")
         builder.append(now).append("\n")
-        builder.append("#1-%04d".format(counter)).append("\n")
+        builder.append(receiptNumber).append("\n")
         val bodyEnd = builder.length
 
         builder.setSpan(AbsoluteSizeSpan(bodySize), bodyStart, bodyEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
