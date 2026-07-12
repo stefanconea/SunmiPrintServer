@@ -79,6 +79,15 @@ A specialized high-visibility layout (`generateBanuSugeAlertBuilder`) for securi
 notifications — large centered text with a fixed banner format. Treated as its own `PrintJob`
 type, not a variant of `plain`.
 
+The alert prints a source label (replacing what used to be a hardcoded `"unknown"` line) derived
+from `processJob()`'s existing `source` parameter (the same value used for Job Logs attribution),
+threaded through `renderJobToBitmap()` and `generateStyledBuilder()` down to the builder. If you
+add a new inbound path, its `source` string needs an entry in `alertSourceLabel()` too, or it'll
+fall through and print the raw internal source string verbatim. `AppHttpServer`'s `POST /print`
+handler distinguishes the built-in web page from other HTTP callers (curl, Home Assistant's HTTP
+integration) by checking for a `Referer` header — present on a same-page browser `fetch()`,
+absent from headless clients — rather than requiring any change on the caller's side.
+
 ### `guard_receipt` mode
 
 A fixed POS-style entry-ticket layout — company name header, `Employee: Owner`, `POS: POS 1`, a
