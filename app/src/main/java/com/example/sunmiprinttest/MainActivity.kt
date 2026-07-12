@@ -847,7 +847,7 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) { null }
 
             if (qrBitmap == null) return textBitmap
-            val qrTopMargin = -10
+            val qrTopMargin = 4
             val finalBitmap = createBitmap(width, textBitmap.height + qrBitmap.height + qrTopMargin + 6, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(finalBitmap)
             canvas.drawColor(Color.WHITE)
