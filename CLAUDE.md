@@ -128,6 +128,17 @@ Two separate ring-buffer loggers, each with its own listener-driven screen — d
   `"Local"` for in-app UI prints. When adding a new inbound source, pass a `source` string through
   to `processJob()` so its jobs are attributable in the Job Logs screen.
 
+`renderAndPrintBitmap()`'s success/failure verdict is a heuristic, not a hard guarantee: the Sunmi
+SDK has no true print-completion callback — `InnerResultCallback.onRunResult(isSuccess)` fires
+almost immediately once the bitmap is *accepted*, well before the physical print (which takes real
+time proportional to content length) actually finishes. So a fault introduced mid-print (e.g. the
+paper door opened) would still log as Success if only that callback were trusted. To catch it,
+`renderAndPrintBitmap()` polls `service.updatePrinterState()` for a window sized to the bitmap's
+height (`MS_PER_PIXEL_ROW`/`MIN_WATCH_MS`/`WATCH_STEP_MS` constants) after submitting, and flags
+Failed if a fault shows up at any point during that window. This is a best-effort approximation of
+"print finished," not an authoritative signal — tune those constants if jobs are logged as
+succeeding despite visible physical failures, or failing despite a clean print.
+
 ## Technical constraints
 
 - Native print width is fixed at **384px**; all rendering targets this width.
