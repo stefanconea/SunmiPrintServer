@@ -691,7 +691,6 @@ class MainActivity : AppCompatActivity() {
     private fun generateStyledBuilder(job: PrintJob): SpannableStringBuilder {
         val type = job.type ?: "plain"
         if (type == "alert") return generateBanuSugeAlertBuilder(job.content ?: "6666", job.timestamp)
-        if (type == "guard_receipt") return generateGuardReceiptBuilder(job.quantity ?: 1)
         val builder = SpannableStringBuilder()
         val title = job.title ?: ""; val content = job.content ?: job.text ?: job.message ?: ""
         val titleSize = job.titleSize ?: 32; val contentSize = job.contentSize ?: 26
@@ -768,19 +767,10 @@ class MainActivity : AppCompatActivity() {
     private fun formatMoney(value: Double): String =
         String.format(Locale.getDefault(), "%.2f", value).replace('.', ',') + " lei"
 
-    private fun generateGuardReceiptBuilder(quantity: Int): SpannableStringBuilder {
+    private fun generateGuardReceiptBuilder(quantity: Int, receiptNumber: String, now: String): SpannableStringBuilder {
         val companyName = prefs.getString("guard_company_name", "Guard")?.takeIf { it.isNotBlank() } ?: "Guard"
         val unitPrice = prefs.getString("guard_price", "50.00")?.replace(',', '.')?.toDoubleOrNull() ?: 50.0
         val total = unitPrice * quantity
-
-        // Persisted across prints so receipts are sequentially numbered like a real POS.
-        val counter = prefs.getInt("guard_receipt_counter", 0) + 1
-        prefs.edit().putInt("guard_receipt_counter", counter).apply()
-
-        val sdf = SimpleDateFormat("dd-MM-yyyy hh:mm a", Locale.getDefault())
-        val now = sdf.format(Date())
-        val receiptNumber = "#1-%04d".format(counter)
-        EntranceReceiptManager.addReceipt(prefs, counter, receiptNumber, now, total)
 
         val bodySize = 22
         val priceRowSize = 24
@@ -834,6 +824,36 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderJobToBitmap(job: PrintJob): Bitmap {
         val width = 384; val type = job.type ?: "plain"
+        if (type == "guard_receipt") {
+            val quantity = job.quantity ?: 1
+
+            // Persisted across prints so receipts are sequentially numbered like a real POS.
+            val counter = prefs.getInt("guard_receipt_counter", 0) + 1
+            prefs.edit().putInt("guard_receipt_counter", counter).apply()
+            val receiptNumber = "#1-%04d".format(counter)
+            val sdf = SimpleDateFormat("dd-MM-yyyy hh:mm a", Locale.getDefault())
+            val now = sdf.format(Date())
+
+            val unitPrice = prefs.getString("guard_price", "50.00")?.replace(',', '.')?.toDoubleOrNull() ?: 50.0
+            EntranceReceiptManager.addReceipt(prefs, counter, receiptNumber, now, unitPrice * quantity)
+
+            val textBitmap = renderTextToBitmap(generateGuardReceiptBuilder(quantity, receiptNumber, now), width)
+
+            val qrBitmap = try {
+                val bitMatrix: BitMatrix = MultiFormatWriter().encode("$receiptNumber $now", BarcodeFormat.QR_CODE, 220, 220)
+                val bmp = createBitmap(bitMatrix.width, bitMatrix.height, Bitmap.Config.ARGB_8888)
+                for (x in 0 until bitMatrix.width) { for (y in 0 until bitMatrix.height) bmp.setPixel(x, y, if (bitMatrix.get(x, y)) Color.BLACK else Color.WHITE) }
+                bmp
+            } catch (_: Exception) { null }
+
+            if (qrBitmap == null) return textBitmap
+            val finalBitmap = createBitmap(width, textBitmap.height + qrBitmap.height + 20, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(finalBitmap)
+            canvas.drawColor(Color.WHITE)
+            canvas.drawBitmap(textBitmap, 0f, 0f, null)
+            canvas.drawBitmap(qrBitmap, ((width - qrBitmap.width) / 2).toFloat(), (textBitmap.height + 10).toFloat(), null)
+            return finalBitmap
+        }
         if (type == "image") {
             return try {
                 val data = job.content ?: ""; val bitmap = if (data.startsWith("http")) BitmapFactory.decodeStream(URL(data).openConnection().getInputStream()) else { val ds = Base64.decode(data, Base64.DEFAULT); BitmapFactory.decodeByteArray(ds, 0, ds.size) }

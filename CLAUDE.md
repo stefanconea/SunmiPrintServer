@@ -81,27 +81,43 @@ type, not a variant of `plain`.
 
 ### `guard_receipt` mode
 
-A fixed POS-style entry-ticket layout (`generateGuardReceiptBuilder`) — company name header,
-`Employee: Owner`, `POS: POS 1`, a single `Intrare interzisa` line item, total, `Cash` line,
-timestamp, and a sequential receipt number (`#1-%04d`) persisted via a `SharedPreferences`
-counter (`guard_receipt_counter`) so numbering survives across prints/app restarts. Company name
-(`guard_company_name`) and unit price (`guard_price`) are user-configurable in Settings, not
-passed per job — only `job.quantity` (default 1) varies the ticket (multiplies the line total).
-Total/Cash are right-aligned to the receipt's right edge via a real `AlignmentSpan`
-(`ALIGN_OPPOSITE`) per row, not character-count padding — two `SpannableStringBuilder` pitfalls
-worth knowing before touching this function again: (1) `renderTextToBitmap` picks one base
-alignment for the *entire* layout the moment any `ALIGN_OPPOSITE` span exists anywhere in it, so
-every paragraph needs its own explicit alignment span or it'll be swept into that base; (2)
-reusing a single `AlignmentSpan` (or likely any span) object across multiple `setSpan()` calls at
-different ranges *moves* its attachment each time rather than adding a new one — only the last
-range keeps it. Each row gets its own freshly-constructed span instance. Row font sizes
-(`bodySize`/`itemSize`/`totalSize`) and their monospace character budgets are reconciled via
-`monoCharsPerLine()`, which measures real glyph width with `Paint.measureText()` rather than
-guessing a linear scale factor — a guessed ratio was just wrong enough to wrap the item row and
-rule lines mid-word once the item font size changed. If you change any of these font sizes again,
-verify by temporarily dumping the rendered bitmap to a file (`bitmap.compress(...)` to
-`getExternalFilesDir(null)`) and pulling it via `adb pull` — job-log "Success" only proves the
-SDK accepted the bitmap, not that the layout is visually correct.
+A fixed POS-style entry-ticket layout — company name header, `Employee: Owner`, `POS: POS 1`, a
+single `Intrare interzisa` line item, total, `Cash` line, timestamp, a sequential receipt number
+(`#1-%04d`), and a QR code (encoding `"<receiptNumber> <timestamp>"`) printed below everything
+else. Unlike every other `PrintJob` type, this one is handled by a dedicated branch in
+`renderJobToBitmap()` rather than flowing through `generateStyledBuilder()`'s generic dispatch:
+the receipt number/timestamp/counter-increment and the `EntranceReceiptManager.addReceipt(...)`
+call happen once in that branch, then get passed as parameters into `generateGuardReceiptBuilder()`
+(pure text layout) and reused again to build the QR content, so the counter only advances once
+and the text and QR always agree on the same receipt number — don't move that bookkeeping back
+into `generateGuardReceiptBuilder()` or split it across two call sites. The text bitmap
+(`renderTextToBitmap`) and the QR bitmap (built the same way as the standalone `qr` type, via
+ZXing's `MultiFormatWriter`) are drawn onto one final `Canvas`, text first, QR centered below it.
+The counter is persisted in `SharedPreferences` (`guard_receipt_counter`) so numbering survives
+app restarts; company name (`guard_company_name`) and unit price (`guard_price`) are
+user-configurable in Settings, not passed per job — only `job.quantity` (default 1) varies the
+ticket (multiplies the line total).
+
+Row-level text layout inside `generateGuardReceiptBuilder()` uses `padRow()` (manual space
+padding, not `AlignmentSpan`) to position Total/Cash values — an `AlignmentSpan(ALIGN_OPPOSITE)`
+per row was tried and reverted because it right-aligns the *entire* padded label+value string as
+one block, visibly shoving the "Total"/"Cash" labels away from the left margin instead of just
+pinning the value flush right. Two more `SpannableStringBuilder` pitfalls worth knowing before
+touching this function again: (1) `renderTextToBitmap` picks one base alignment for the *entire*
+layout the moment any `ALIGN_OPPOSITE` span exists anywhere in it, so every paragraph needs its
+own explicit alignment span or it'll be swept into that base; (2) reusing a single span object
+across multiple `setSpan()` calls at different ranges *moves* its attachment each time rather than
+adding a new one — only the last range keeps it; give every row its own freshly-constructed span
+instance. Row font sizes (`bodySize`/`priceRowSize`/`qtyRowSize`/`totalSize`) and their monospace
+character budgets are reconciled via `monoCharsPerLine()`, which measures real glyph width with
+`Paint.measureText()` rather than guessing a linear scale factor — a guessed ratio was just wrong
+enough to wrap rows mid-word. The item row's label (`"Intrare interzisa"` + a price) is already
+close to the 384px ceiling at the current font size; there is essentially no headroom to make it
+bigger without wrapping unless the label itself gets shorter or moves to its own line. If you
+change any font size or the QR layout again, verify by temporarily dumping the rendered bitmap to
+a file (`bitmap.compress(...)` to `getExternalFilesDir(null)`) and pulling it via `adb pull` —
+job-log "Success" only proves the SDK accepted the bitmap, not that the layout is visually
+correct.
 
 ### Three inbound protocols + one outbound
 
