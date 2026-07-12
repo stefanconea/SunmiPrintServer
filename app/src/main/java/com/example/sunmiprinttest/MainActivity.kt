@@ -765,26 +765,26 @@ class MainActivity : AppCompatActivity() {
         val now = sdf.format(Date())
 
         val builder = SpannableStringBuilder()
-        val center = AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER)
+        val ruleWidth = 26
+        val rule = "-".repeat(ruleWidth)
 
         val headerStart = builder.length
         builder.append(companyName).append("\n")
-        builder.setSpan(AbsoluteSizeSpan(34), headerStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(AbsoluteSizeSpan(26), headerStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         builder.setSpan(StyleSpan(Typeface.BOLD), headerStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        builder.setSpan(center, headerStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
 
         val bodyStart = builder.length
         builder.append("Employee: Owner\n")
         builder.append("POS: POS 1\n")
-        builder.append("\n")
-        builder.append(padRow("Intrare interzisa", formatMoney(unitPrice))).append("\n")
+        builder.append(rule).append("\n")
+        builder.append(padRow("Intrare interzisa", formatMoney(unitPrice), ruleWidth)).append("\n")
         builder.append("$quantity x ${formatMoney(unitPrice)}\n")
-        builder.append("\n")
+        builder.append(rule).append("\n")
         val totalStart = builder.length
-        builder.append(padRow("Total", formatMoney(total))).append("\n")
+        builder.append(padRow("Total", formatMoney(total), ruleWidth)).append("\n")
         val totalEnd = builder.length
-        builder.append(padRow("Cash", formatMoney(total))).append("\n")
-        builder.append("\n")
+        builder.append(padRow("Cash", formatMoney(total), ruleWidth)).append("\n")
+        builder.append(rule).append("\n")
         builder.append(now).append("\n")
         builder.append("#1-%04d".format(counter)).append("\n")
         builder.setSpan(AbsoluteSizeSpan(22), bodyStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
