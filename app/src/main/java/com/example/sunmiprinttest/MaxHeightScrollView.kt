@@ -15,7 +15,7 @@ class MaxHeightScrollView @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : ScrollView(context, attrs) {
 
-    var maxHeightDp: Int = 500
+    var maxHeightDp: Int = 250
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val maxHeightPx = (maxHeightDp * resources.displayMetrics.density).toInt()
