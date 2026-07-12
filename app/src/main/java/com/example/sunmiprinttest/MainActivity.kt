@@ -808,7 +808,7 @@ class MainActivity : AppCompatActivity() {
         builder.append(padRow("Cash", formatMoney(total), ruleWidth)).append("\n")
         builder.append(rule).append("\n")
         builder.append(now).append("\n")
-        builder.append(receiptNumber).append("\n")
+        builder.append(receiptNumber)
         val bodyEnd = builder.length
 
         builder.setSpan(AbsoluteSizeSpan(bodySize), bodyStart, bodyEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -847,11 +847,12 @@ class MainActivity : AppCompatActivity() {
             } catch (_: Exception) { null }
 
             if (qrBitmap == null) return textBitmap
-            val finalBitmap = createBitmap(width, textBitmap.height + qrBitmap.height + 20, Bitmap.Config.ARGB_8888)
+            val qrTopMargin = -10
+            val finalBitmap = createBitmap(width, textBitmap.height + qrBitmap.height + qrTopMargin + 6, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(finalBitmap)
             canvas.drawColor(Color.WHITE)
             canvas.drawBitmap(textBitmap, 0f, 0f, null)
-            canvas.drawBitmap(qrBitmap, ((width - qrBitmap.width) / 2).toFloat(), (textBitmap.height + 10).toFloat(), null)
+            canvas.drawBitmap(qrBitmap, ((width - qrBitmap.width) / 2).toFloat(), (textBitmap.height + qrTopMargin).toFloat(), null)
             return finalBitmap
         }
         if (type == "image") {
