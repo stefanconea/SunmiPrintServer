@@ -656,7 +656,9 @@ class MainActivity : AppCompatActivity() {
     private fun processJob(job: PrintJob, overrideBitmap: Bitmap? = null) {
         printExecutor.submit {
             val bitmap = overrideBitmap ?: renderJobToBitmap(job)
-            renderAndPrintBitmap(bitmap, job.linesAfter ?: 0)
+            val linesAfter = job.linesAfter
+                ?: prefs.getString("default_lines_after", "3")?.toIntOrNull() ?: 3
+            renderAndPrintBitmap(bitmap, linesAfter)
         }
     }
 

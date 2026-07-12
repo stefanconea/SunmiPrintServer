@@ -49,6 +49,11 @@ immediately.
 All services target the printer's notify entity (`target: entity:`), so with
 multiple printers configured you just pick which one in the service call.
 
+`lines_after` on every `print_*` service is optional. If you omit it, the app
+applies its own configured default (Settings → "Lines After Content" in the
+Android app, `3` by default) — you don't need to pass it on every call unless
+you want to override it for that one print.
+
 ## Known limitation
 
 `POST /print` returns success as soon as the Android app **enqueues** the job

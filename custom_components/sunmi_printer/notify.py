@@ -50,7 +50,7 @@ PRINT_TEXT_SCHEMA = {
     vol.Optional("content_size", default=DEFAULT_CONTENT_SIZE): cv.positive_int,
     vol.Optional("center_title", default=False): cv.boolean,
     vol.Optional("alignment", default="left"): _ALIGNMENT_VALIDATOR,
-    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+    vol.Optional("lines_after"): cv.positive_int,
 }
 
 PRINT_BOXED_SCHEMA = {
@@ -60,12 +60,12 @@ PRINT_BOXED_SCHEMA = {
     vol.Optional("content_size", default=DEFAULT_CONTENT_SIZE): cv.positive_int,
     vol.Optional("center_title", default=False): cv.boolean,
     vol.Optional("alignment", default="left"): _ALIGNMENT_VALIDATOR,
-    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+    vol.Optional("lines_after"): cv.positive_int,
 }
 
 PRINT_BANNER_SCHEMA = {
     vol.Required("content"): cv.string,
-    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+    vol.Optional("lines_after"): cv.positive_int,
 }
 
 PRINT_LIST_SCHEMA = {
@@ -73,31 +73,31 @@ PRINT_LIST_SCHEMA = {
     vol.Required("content"): cv.string,
     vol.Optional("content_size", default=DEFAULT_CONTENT_SIZE): cv.positive_int,
     vol.Optional("alignment", default="left"): _ALIGNMENT_VALIDATOR,
-    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+    vol.Optional("lines_after"): cv.positive_int,
 }
 
 PRINT_ALERT_SCHEMA = {
     vol.Required("content"): cv.string,
     vol.Optional("timestamp"): cv.string,
-    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+    vol.Optional("lines_after"): cv.positive_int,
 }
 
 PRINT_QR_SCHEMA = {
     vol.Required("content"): cv.string,
     vol.Optional("alignment", default="center"): _ALIGNMENT_VALIDATOR,
-    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+    vol.Optional("lines_after"): cv.positive_int,
 }
 
 PRINT_BARCODE_SCHEMA = {
     vol.Required("content"): cv.string,
     vol.Optional("alignment", default="center"): _ALIGNMENT_VALIDATOR,
-    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+    vol.Optional("lines_after"): cv.positive_int,
 }
 
 PRINT_IMAGE_SCHEMA = {
     vol.Optional("url"): cv.string,
     vol.Optional("image_entity"): cv.entity_id,
-    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+    vol.Optional("lines_after"): cv.positive_int,
 }
 
 PRINT_RAW_SCHEMA = {
@@ -186,7 +186,7 @@ class SunmiPrinterNotifyEntity(NotifyEntity):
         content_size: int = DEFAULT_CONTENT_SIZE,
         center_title: bool = False,
         alignment: str = "left",
-        lines_after: int = DEFAULT_LINES_AFTER,
+        lines_after: int | None = None,
     ) -> None:
         await self._client.async_print(
             {
@@ -209,7 +209,7 @@ class SunmiPrinterNotifyEntity(NotifyEntity):
         content_size: int = DEFAULT_CONTENT_SIZE,
         center_title: bool = False,
         alignment: str = "left",
-        lines_after: int = DEFAULT_LINES_AFTER,
+        lines_after: int | None = None,
     ) -> None:
         await self._client.async_print(
             {
@@ -225,7 +225,7 @@ class SunmiPrinterNotifyEntity(NotifyEntity):
         )
 
     async def async_print_banner(
-        self, content: str, lines_after: int = DEFAULT_LINES_AFTER
+        self, content: str, lines_after: int | None = None
     ) -> None:
         await self._client.async_print(
             {"type": "banner", "content": content, "linesAfter": lines_after}
@@ -237,7 +237,7 @@ class SunmiPrinterNotifyEntity(NotifyEntity):
         title: str | None = None,
         content_size: int = DEFAULT_CONTENT_SIZE,
         alignment: str = "left",
-        lines_after: int = DEFAULT_LINES_AFTER,
+        lines_after: int | None = None,
     ) -> None:
         await self._client.async_print(
             {
@@ -254,7 +254,7 @@ class SunmiPrinterNotifyEntity(NotifyEntity):
         self,
         content: str,
         timestamp: str | None = None,
-        lines_after: int = DEFAULT_LINES_AFTER,
+        lines_after: int | None = None,
     ) -> None:
         await self._client.async_print(
             {
@@ -269,7 +269,7 @@ class SunmiPrinterNotifyEntity(NotifyEntity):
         self,
         content: str,
         alignment: str = "center",
-        lines_after: int = DEFAULT_LINES_AFTER,
+        lines_after: int | None = None,
     ) -> None:
         await self._client.async_print(
             {
@@ -284,7 +284,7 @@ class SunmiPrinterNotifyEntity(NotifyEntity):
         self,
         content: str,
         alignment: str = "center",
-        lines_after: int = DEFAULT_LINES_AFTER,
+        lines_after: int | None = None,
     ) -> None:
         await self._client.async_print(
             {
@@ -299,7 +299,7 @@ class SunmiPrinterNotifyEntity(NotifyEntity):
         self,
         url: str | None = None,
         image_entity: str | None = None,
-        lines_after: int = DEFAULT_LINES_AFTER,
+        lines_after: int | None = None,
     ) -> None:
         if bool(url) == bool(image_entity):
             raise ServiceValidationError(

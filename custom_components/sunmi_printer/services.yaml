@@ -59,11 +59,13 @@ print_text:
       default: left
     lines_after:
       name: Lines after
+      description: >
+        Optional. If omitted, the app's own configured default (Settings ->
+        Lines After Content on the device, 3 by default) is used.
       selector:
         number:
           min: 0
           max: 20
-      default: 3
 
 print_boxed:
   name: Print boxed
@@ -112,11 +114,13 @@ print_boxed:
       default: left
     lines_after:
       name: Lines after
+      description: >
+        Optional. If omitted, the app's own configured default (Settings ->
+        Lines After Content on the device, 3 by default) is used.
       selector:
         number:
           min: 0
           max: 20
-      default: 3
 
 print_banner:
   name: Print banner
@@ -132,11 +136,13 @@ print_banner:
         text:
     lines_after:
       name: Lines after
+      description: >
+        Optional. If omitted, the app's own configured default (Settings ->
+        Lines After Content on the device, 3 by default) is used.
       selector:
         number:
           min: 0
           max: 20
-      default: 3
 
 print_list:
   name: Print list
@@ -173,11 +179,13 @@ print_list:
       default: left
     lines_after:
       name: Lines after
+      description: >
+        Optional. If omitted, the app's own configured default (Settings ->
+        Lines After Content on the device, 3 by default) is used.
       selector:
         number:
           min: 0
           max: 20
-      default: 3
 
 print_alert:
   name: Print alert
@@ -200,11 +208,13 @@ print_alert:
         text:
     lines_after:
       name: Lines after
+      description: >
+        Optional. If omitted, the app's own configured default (Settings ->
+        Lines After Content on the device, 3 by default) is used.
       selector:
         number:
           min: 0
           max: 20
-      default: 3
 
 print_qr:
   name: Print QR code
@@ -227,11 +237,13 @@ print_qr:
       default: center
     lines_after:
       name: Lines after
+      description: >
+        Optional. If omitted, the app's own configured default (Settings ->
+        Lines After Content on the device, 3 by default) is used.
       selector:
         number:
           min: 0
           max: 20
-      default: 3
 
 print_barcode:
   name: Print barcode
@@ -256,11 +268,13 @@ print_barcode:
       default: center
     lines_after:
       name: Lines after
+      description: >
+        Optional. If omitted, the app's own configured default (Settings ->
+        Lines After Content on the device, 3 by default) is used.
       selector:
         number:
           min: 0
           max: 20
-      default: 3
 
 print_image:
   name: Print image
@@ -289,11 +303,13 @@ print_image:
             - camera
     lines_after:
       name: Lines after
+      description: >
+        Optional. If omitted, the app's own configured default (Settings ->
+        Lines After Content on the device, 3 by default) is used.
       selector:
         number:
           min: 0
           max: 20
-      default: 3
 
 print_raw:
   name: Print raw job
