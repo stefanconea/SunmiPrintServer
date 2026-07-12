@@ -409,18 +409,24 @@ class MainActivity : AppCompatActivity() {
             }
 
             if (session.method == Method.POST && session.uri == "/print") {
+                // Browsers automatically attach Referer on a same-page fetch() call; external
+                // API callers (curl, Home Assistant, etc.) generally don't send one at all, so
+                // this distinguishes the built-in web page from everything else hitting the
+                // documented JSON endpoint.
+                val isFromWebPage = session.headers["referer"] != null
+                val httpSource = if (isFromWebPage) "HTTP Server (Web Page)" else "HTTP Server (External)"
                 try {
                     val map = mutableMapOf<String, String>()
                     session.parseBody(map)
                     val json = map["postData"] ?: session.queryParameterString
                     val job = gson.fromJson(json, PrintJob::class.java)
-                    processJob(job, source = "HTTP Server")
+                    processJob(job, source = httpSource)
                     return newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"ok\"}")
                 } catch (e: Exception) {
                     return try {
                         val body = session.inputStream.bufferedReader().readText()
                         val job = gson.fromJson(body, PrintJob::class.java)
-                        processJob(job, source = "HTTP Server")
+                        processJob(job, source = httpSource)
                         newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"ok\"}")
                     } catch (_: Exception) {
                         newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Error: ${e.message}")
@@ -681,16 +687,16 @@ class MainActivity : AppCompatActivity() {
     private fun processJob(job: PrintJob, overrideBitmap: Bitmap? = null, source: String = "Local") {
         val jobId = JobLogManager.startJob(source, job.type ?: "plain")
         printExecutor.submit {
-            val bitmap = overrideBitmap ?: renderJobToBitmap(job)
+            val bitmap = overrideBitmap ?: renderJobToBitmap(job, source)
             val linesAfter = job.linesAfter
                 ?: prefs.getString("default_lines_after", "3")?.toIntOrNull() ?: 3
             renderAndPrintBitmap(bitmap, linesAfter, jobId)
         }
     }
 
-    private fun generateStyledBuilder(job: PrintJob): SpannableStringBuilder {
+    private fun generateStyledBuilder(job: PrintJob, source: String = "Local"): SpannableStringBuilder {
         val type = job.type ?: "plain"
-        if (type == "alert") return generateBanuSugeAlertBuilder(job.content ?: "6666", job.timestamp)
+        if (type == "alert") return generateBanuSugeAlertBuilder(job.content ?: "6666", job.timestamp, source)
         val builder = SpannableStringBuilder()
         val title = job.title ?: ""; val content = job.content ?: job.text ?: job.message ?: ""
         val titleSize = job.titleSize ?: 32; val contentSize = job.contentSize ?: 26
@@ -731,7 +737,21 @@ class MainActivity : AppCompatActivity() {
         return builder
     }
 
-    private fun generateBanuSugeAlertBuilder(content: String, sentTime: String? = null): SpannableStringBuilder {
+    // Maps processJob()'s protocol-level source (used for JobLogManager attribution) to the
+    // friendlier label shown on the printed alert. MQTT and the raw ESC/POS listener are both
+    // documented as primarily serving Home Assistant integrations (see CLAUDE.md), and an
+    // "external" HTTP POST /print caller with no Referer (curl, Home Assistant's own HTTP
+    // integration, etc.) is presumed the same -- only the built-in web page and the desktop
+    // Python server get their own distinct labels.
+    private fun alertSourceLabel(source: String): String = when (source) {
+        "HTTP Server (Web Page)" -> "HTTP Web Page"
+        "HTTP Server (External)", "MQTT", "ESC/POS Server" -> "Home Assistant"
+        "Desktop Server (Python)" -> "Server"
+        "Local" -> "Local"
+        else -> source
+    }
+
+    private fun generateBanuSugeAlertBuilder(content: String, sentTime: String? = null, source: String = "Local"): SpannableStringBuilder {
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         val now = sdf.format(Date()); val sent = sentTime ?: now; val builder = SpannableStringBuilder(); val center = AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER)
         fun appendCentered(text: String, size: Int, bold: Boolean = false) {
@@ -740,9 +760,9 @@ class MainActivity : AppCompatActivity() {
             if (bold) builder.setSpan(StyleSpan(Typeface.BOLD), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
             builder.setSpan(center, start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
-        appendCentered("ALERT\n", 60, true); appendCentered("WARNING\n", 32); appendCentered("\n", 20) 
+        appendCentered("ALERT\n", 60, true); appendCentered("WARNING\n", 32); appendCentered("\n", 20)
         appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20); appendCentered("\n", 5); appendCentered("${content.trim()}\n", 50, true); appendCentered("\n", 5); appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20)
-        appendCentered("\n", 15); appendCentered("* * * * * * *\n", 20); appendCentered("\n", 5); appendCentered("unknown\n", 26); appendCentered("sent: $sent\nrecv: $now\n", 22); appendCentered("\n", 5); appendCentered("* * * * * * *\n", 20)
+        appendCentered("\n", 15); appendCentered("* * * * * * *\n", 20); appendCentered("\n", 5); appendCentered("${alertSourceLabel(source)}\n", 26); appendCentered("sent: $sent\nrecv: $now\n", 22); appendCentered("\n", 5); appendCentered("* * * * * * *\n", 20)
         appendCentered("\n", 15); appendCentered("Thank you for using B.A.N.U.S.U.G.E\n", 26); appendCentered("(Background Alert Notification Utility for Security Updates & General Events)\n", 14)
         return builder
     }
@@ -826,7 +846,7 @@ class MainActivity : AppCompatActivity() {
         return builder
     }
 
-    private fun renderJobToBitmap(job: PrintJob): Bitmap {
+    private fun renderJobToBitmap(job: PrintJob, source: String = "Local"): Bitmap {
         val width = 384; val type = job.type ?: "plain"
         if (type == "guard_receipt") {
             val quantity = job.quantity ?: 1
@@ -882,13 +902,13 @@ class MainActivity : AppCompatActivity() {
             } catch (e: Exception) { renderTextToBitmap(SpannableStringBuilder("$type Error: ${e.message}"), width) }
         }
         if (type == "boxed") {
-            val padding = 16; val innerWidth = width - (padding * 2); val innerBitmap = renderTextToBitmap(generateStyledBuilder(job), innerWidth)
+            val padding = 16; val innerWidth = width - (padding * 2); val innerBitmap = renderTextToBitmap(generateStyledBuilder(job, source), innerWidth)
             val boxedBitmap = createBitmap(width, innerBitmap.height + (padding * 2), Bitmap.Config.ARGB_8888)
             val canvas = Canvas(boxedBitmap); canvas.drawColor(Color.WHITE); val paint = Paint().apply { color = Color.BLACK; style = Paint.Style.STROKE; strokeWidth = 4f }
             canvas.drawRect(2f, 2f, (width - 2).toFloat(), (innerBitmap.height + (padding * 2) - 2).toFloat(), paint); canvas.drawBitmap(innerBitmap, padding.toFloat(), padding.toFloat(), null)
             return boxedBitmap
         }
-        return renderTextToBitmap(generateStyledBuilder(job), width)
+        return renderTextToBitmap(generateStyledBuilder(job, source), width)
     }
 
     private fun renderTextToBitmap(builder: SpannableStringBuilder, width: Int): Bitmap {
