@@ -308,6 +308,17 @@ class MainActivity : AppCompatActivity() {
         return "0.0.0.0"
     }
 
+    private fun printerStatusLabel(status: Int): String = when (status) {
+        1 -> "Ready"
+        2 -> "Preparing"
+        3 -> "Comms Error"
+        4 -> "No Paper"
+        5 -> "Overheated"
+        6 -> "Door Open"
+        7 -> "Cutter Error"
+        else -> "Error ($status)"
+    }
+
     private fun startStatusMonitoring() {
         if (isMonitoringStatus) return
         isMonitoringStatus = true
@@ -316,16 +327,7 @@ class MainActivity : AppCompatActivity() {
                 val service = printerService ?: break
                 try {
                     currentPrinterStatus = service.updatePrinterState()
-                    val statusStr = when (currentPrinterStatus) {
-                        1 -> "Ready"
-                        2 -> "Preparing"
-                        3 -> "Comms Error"
-                        4 -> "No Paper"
-                        5 -> "Overheated"
-                        6 -> "Door Open"
-                        7 -> "Cutter Error"
-                        else -> "Error ($currentPrinterStatus)"
-                    }
+                    val statusStr = printerStatusLabel(currentPrinterStatus)
                     val colorStr = if (currentPrinterStatus == 1) "#388E3C" else "#D32F2F"
                     runOnUiThread {
                         hwStatusText.text = "[$statusStr]"
@@ -781,8 +783,16 @@ class MainActivity : AppCompatActivity() {
         }
         val resultCallback = object : InnerResultCallback() {
             override fun onRunResult(isSuccess: Boolean) {
-                JobLogManager.completeJob(jobId, isSuccess, if (isSuccess) null else "printer failure")
-                runOnUiThread { statusText.text = if (isSuccess) getString(R.string.status_done) else getString(R.string.status_error, "printer failure") }
+                // The SDK's isSuccess only means "the print command was accepted" -- it does not
+                // guarantee the paper physically came out cleanly (e.g. the door was opened
+                // mid-print). Cross-check live hardware state so that case is still caught.
+                val hwFault = try {
+                    service.updatePrinterState().takeIf { it != 1 }?.let { printerStatusLabel(it) }
+                } catch (_: RemoteException) { null }
+                val success = isSuccess && hwFault == null
+                val reason = hwFault ?: "printer failure"
+                JobLogManager.completeJob(jobId, success, if (success) null else reason)
+                runOnUiThread { statusText.text = if (success) getString(R.string.status_done) else getString(R.string.status_error, reason) }
             }
             override fun onReturnString(result: String?) {}
             override fun onRaiseException(code: Int, msg: String?) {
