@@ -271,9 +271,9 @@ class MainActivity : AppCompatActivity() {
                 val line = reader.readLine() ?: break
                 try {
                     val job = gson.fromJson(line, PrintJob::class.java)
-                    processJob(job)
+                    processJob(job, source = "Desktop Server (Python)")
                 } catch (_: Exception) {
-                    processJob(PrintJob(content = line))
+                    processJob(PrintJob(content = line), source = "Desktop Server (Python)")
                 }
             }
         } catch (e: Exception) {
@@ -392,13 +392,13 @@ class MainActivity : AppCompatActivity() {
                     session.parseBody(map)
                     val json = map["postData"] ?: session.queryParameterString
                     val job = gson.fromJson(json, PrintJob::class.java)
-                    processJob(job)
+                    processJob(job, source = "HTTP Server")
                     return newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"ok\"}")
                 } catch (e: Exception) {
                     return try {
                         val body = session.inputStream.bufferedReader().readText()
                         val job = gson.fromJson(body, PrintJob::class.java)
-                        processJob(job)
+                        processJob(job, source = "HTTP Server")
                         newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"ok\"}")
                     } catch (_: Exception) {
                         newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Error: ${e.message}")
@@ -477,7 +477,7 @@ class MainActivity : AppCompatActivity() {
                                                 lastQrContent = String(payload.copyOfRange(3, len)).trim()
                                             } else if (fn == 81) {
                                                 lastQrContent?.let {
-                                                    processJob(PrintJob(type = "qr", content = it, alignment = currentAlign))
+                                                    processJob(PrintJob(type = "qr", content = it, alignment = currentAlign), source = "ESC/POS Server")
                                                 }
                                             }
                                         }
@@ -536,14 +536,14 @@ class MainActivity : AppCompatActivity() {
                 else -> 0f
             }
             canvas.drawBitmap(bitmap, xOffset, 0f, null)
-            processJob(PrintJob(type = "bitmap", alignment = align, content = ""), finalBitmap)
+            processJob(PrintJob(type = "bitmap", alignment = align, content = ""), finalBitmap, source = "ESC/POS Server")
         }
 
         private fun flushTextBytes(os: ByteArrayOutputStream, align: Int) {
             val bytes = os.toByteArray()
             if (bytes.isNotEmpty()) {
                 val line = String(bytes, java.nio.charset.Charset.forName("ISO-8859-1"))
-                processJob(PrintJob(content = line, alignment = align, linesAfter = 0, contentSize = 22))
+                processJob(PrintJob(content = line, alignment = align, linesAfter = 0, contentSize = 22), source = "ESC/POS Server")
             }
             os.reset()
         }
@@ -572,8 +572,8 @@ class MainActivity : AppCompatActivity() {
                 }
                 override fun messageArrived(topic: String?, message: MqttMessage?) {
                     val payload = message?.toString() ?: return
-                    try { processJob(gson.fromJson(payload, PrintJob::class.java)) } 
-                    catch (_: Exception) { processJob(PrintJob(content = payload)) }
+                    try { processJob(gson.fromJson(payload, PrintJob::class.java), source = "MQTT") }
+                    catch (_: Exception) { processJob(PrintJob(content = payload), source = "MQTT") }
                 }
                 override fun deliveryComplete(token: IMqttDeliveryToken?) {}
             })
@@ -653,12 +653,12 @@ class MainActivity : AppCompatActivity() {
         contentSize = textSizeField.text.toString().toIntOrNull() ?: 26, centerTitle = centerTitleCheckBox.isChecked,
         alignment = alignmentSpinner.selectedItemPosition, linesAfter = prefs.getString("default_lines_after", "3")?.toIntOrNull() ?: 3))
 
-    private fun processJob(job: PrintJob, overrideBitmap: Bitmap? = null) {
+    private fun processJob(job: PrintJob, overrideBitmap: Bitmap? = null, source: String = "Local") {
         printExecutor.submit {
             val bitmap = overrideBitmap ?: renderJobToBitmap(job)
             val linesAfter = job.linesAfter
                 ?: prefs.getString("default_lines_after", "3")?.toIntOrNull() ?: 3
-            renderAndPrintBitmap(bitmap, linesAfter)
+            renderAndPrintBitmap(bitmap, linesAfter, source)
         }
     }
 
@@ -769,19 +769,31 @@ class MainActivity : AppCompatActivity() {
         return thresholdBitmap(bitmap)
     }
 
-    private fun renderAndPrintBitmap(bitmap: Bitmap, linesAfter: Int) {
-        val service = printerService ?: return
+    private fun renderAndPrintBitmap(bitmap: Bitmap, linesAfter: Int, source: String = "Local") {
+        val service = printerService ?: run {
+            LogManager.addLog("[$source] Print job failed: printer not connected")
+            return
+        }
         val resultCallback = object : InnerResultCallback() {
-            override fun onRunResult(isSuccess: Boolean) { runOnUiThread { statusText.text = if (isSuccess) getString(R.string.status_done) else getString(R.string.status_error, "printer failure") } }
+            override fun onRunResult(isSuccess: Boolean) {
+                LogManager.addLog("[$source] Print job ${if (isSuccess) "succeeded" else "failed"}")
+                runOnUiThread { statusText.text = if (isSuccess) getString(R.string.status_done) else getString(R.string.status_error, "printer failure") }
+            }
             override fun onReturnString(result: String?) {}
-            override fun onRaiseException(code: Int, msg: String?) { runOnUiThread { statusText.text = getString(R.string.status_error, msg) } }
+            override fun onRaiseException(code: Int, msg: String?) {
+                LogManager.addLog("[$source] Print job failed: $msg")
+                runOnUiThread { statusText.text = getString(R.string.status_error, msg) }
+            }
             override fun onPrintResult(code: Int, msg: String?) {}
         }
         try {
             runOnUiThread { statusText.text = getString(R.string.status_printing) }
             service.printBitmap(bitmap, resultCallback)
             if (linesAfter > 0) service.lineWrap(linesAfter, null)
-        } catch (e: RemoteException) { runOnUiThread { statusText.text = getString(R.string.status_error, e.message) } }
+        } catch (e: RemoteException) {
+            LogManager.addLog("[$source] Print job failed: ${e.message}")
+            runOnUiThread { statusText.text = getString(R.string.status_error, e.message) }
+        }
     }
 
     private fun thresholdBitmap(bitmap: Bitmap): Bitmap {

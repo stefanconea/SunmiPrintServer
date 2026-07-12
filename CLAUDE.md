@@ -117,6 +117,13 @@ User-configurable values (desktop server URL, MQTT broker/topic, default lines-a
 via `LogsActivity`. Use `LogManager.addLog(...)` for anything a user would want to see in the
 in-app Logs screen (connection events, server errors) — not for routine debug output.
 
+`processJob()`/`renderAndPrintBitmap()` take an optional `source` string identifying which
+inbound protocol submitted the job (`"HTTP Server"`, `"ESC/POS Server"`, `"MQTT"`,
+`"Desktop Server (Python)"`, or the default `"Local"` for in-app UI prints), and log a
+`[source] Print job succeeded/failed: ...` line for every job's outcome (including "printer not
+connected"). When adding a new inbound source, pass a `source` string through to `processJob()`
+so its jobs are attributable in the Logs screen.
+
 ## Technical constraints
 
 - Native print width is fixed at **384px**; all rendering targets this width.
