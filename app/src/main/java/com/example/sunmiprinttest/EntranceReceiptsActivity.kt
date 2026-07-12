@@ -6,7 +6,6 @@ import android.os.Bundle
 import android.view.MenuItem
 import android.view.View
 import android.widget.Button
-import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
@@ -59,12 +58,18 @@ class EntranceReceiptsActivity : AppCompatActivity() {
                 "${receipt.receiptNumber}   ${receipt.timestamp}   $amountText"
             row.setBackgroundColor(if (receipt.paid) Color.parseColor("#E8F5E9") else Color.parseColor("#FFEBEE"))
 
-            val checkBox = row.findViewById<CheckBox>(R.id.paidCheckBox)
-            checkBox.setOnCheckedChangeListener(null)
-            checkBox.isChecked = receipt.paid
-            checkBox.setOnCheckedChangeListener { _, isChecked ->
-                EntranceReceiptManager.setPaid(prefs, receipt.id, isChecked)
-                row.setBackgroundColor(if (isChecked) Color.parseColor("#E8F5E9") else Color.parseColor("#FFEBEE"))
+            val markPaidButton = row.findViewById<Button>(R.id.markPaidButton)
+            markPaidButton.visibility = if (receipt.paid) View.GONE else View.VISIBLE
+            markPaidButton.setOnClickListener {
+                EntranceReceiptManager.setPaid(prefs, receipt.id, true)
+                renderList()
+            }
+            // Paid is otherwise a one-way action (the button disappears once pressed) --
+            // holding down the row is the way back to correct a mistaken tap.
+            row.setOnLongClickListener {
+                EntranceReceiptManager.setPaid(prefs, receipt.id, !receipt.paid)
+                renderList()
+                true
             }
             container.addView(row)
 

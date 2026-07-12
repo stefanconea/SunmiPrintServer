@@ -13,9 +13,13 @@
         android:layout_weight="1"
         android:textSize="14sp" />
 
-    <CheckBox
-        android:id="@+id/paidCheckBox"
+    <Button
+        android:id="@+id/markPaidButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Paid" />
+        android:text="✓ Paid"
+        android:minWidth="0dp"
+        android:minHeight="0dp"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="8dp" />
 </LinearLayout>
