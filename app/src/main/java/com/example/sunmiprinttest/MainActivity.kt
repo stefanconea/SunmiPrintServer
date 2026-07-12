@@ -21,7 +21,6 @@ import android.text.SpannableStringBuilder
 import android.text.StaticLayout
 import android.text.TextPaint
 import android.text.TextWatcher
-import android.text.method.ScrollingMovementMethod
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.AlignmentSpan
 import android.text.style.StyleSpan
@@ -111,7 +110,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var livePreview: TextView
     private lateinit var livePreviewImage: ImageView
     private lateinit var hwStatusText: TextView
-    private lateinit var testEmojiButton: Button
+    private lateinit var entranceQuantityField: EditText
+    private lateinit var entranceButton: Button
 
     private var currentPrinterStatus: Int = 1 
     private var isMonitoringStatus = false
@@ -127,7 +127,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 statusText.text = getString(R.string.status_connected)
                 printButton.isEnabled = true
-                testEmojiButton.isEnabled = true
+                entranceButton.isEnabled = true
             }
             startStatusMonitoring()
         }
@@ -138,7 +138,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread {
                 statusText.text = getString(R.string.status_disconnected)
                 printButton.isEnabled = false
-                testEmojiButton.isEnabled = false
+                entranceButton.isEnabled = false
             }
         }
     }
@@ -183,10 +183,11 @@ class MainActivity : AppCompatActivity() {
         alignmentSpinner = findViewById(R.id.alignmentSpinner)
         livePreview = findViewById(R.id.livePreview)
         livePreviewImage = findViewById(R.id.livePreviewImage)
-        testEmojiButton = findViewById(R.id.btnTestEmoji)
+        entranceQuantityField = findViewById(R.id.entranceQuantityField)
+        entranceButton = findViewById(R.id.btnEntrance)
 
-        livePreview.movementMethod = ScrollingMovementMethod()
-        livePreview.setOnTouchListener { v, _ ->
+        val previewScrollContainer: View = findViewById(R.id.previewScrollContainer)
+        previewScrollContainer.setOnTouchListener { v, _ ->
             v.parent.requestDisallowInterceptTouchEvent(true)
             v.performClick()
             false
@@ -195,7 +196,7 @@ class MainActivity : AppCompatActivity() {
         btnConnect.setOnClickListener { toggleConnection() }
         setupLivePreview()
         printButton.setOnClickListener { printFromFields() }
-        testEmojiButton.setOnClickListener { printThreeSmileyFaces() }
+        entranceButton.setOnClickListener { printEntranceReceipt() }
 
         startHttpServer()
         startEscPosServer()
@@ -663,7 +664,10 @@ class MainActivity : AppCompatActivity() {
         0 -> "plain"; 1 -> "centered"; 2 -> "boxed"; 3 -> "header_body"; 4 -> "banner"; 5 -> "list"; 6 -> "barcode"; 7 -> "qr"; 8 -> "image"; 9 -> "alert"; else -> "plain"
     }
 
-    private fun printThreeSmileyFaces() = processJob(PrintJob(type = "plain", content = "😊😊😊", contentSize = 60))
+    private fun printEntranceReceipt() {
+        val quantity = entranceQuantityField.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 1
+        processJob(PrintJob(type = "guard_receipt", quantity = quantity))
+    }
 
     private fun printFromFields() = processJob(PrintJob(type = getModeKey(printModeSpinner.selectedItemPosition),
         title = titleField.text.toString(), content = inputField.text.toString(), titleSize = titleSizeField.text.toString().toIntOrNull() ?: 32,

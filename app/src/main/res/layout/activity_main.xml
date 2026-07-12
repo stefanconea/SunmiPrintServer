@@ -193,31 +193,38 @@
                 android:textStyle="bold"
                 android:layout_marginBottom="4dp" />
 
-            <FrameLayout
+            <com.example.sunmiprinttest.MaxHeightScrollView
+                android:id="@+id/previewScrollContainer"
                 android:layout_width="wrap_content"
-                android:layout_height="350dp"
+                android:layout_height="wrap_content"
                 android:background="#999999"
                 android:padding="2dp"
                 android:layout_gravity="center_horizontal"
-                android:layout_marginBottom="16dp">
+                android:layout_marginBottom="16dp"
+                android:scrollbars="vertical">
 
-                <ImageView
-                    android:id="@+id/livePreviewImage"
-                    android:layout_width="384px"
-                    android:layout_height="match_parent"
-                    android:background="#FFFFFF"
-                    android:scaleType="fitStart"
-                    android:visibility="gone" />
+                <FrameLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content">
 
-                <TextView
-                    android:id="@+id/livePreview"
-                    android:layout_width="384px"
-                    android:layout_height="match_parent"
-                    android:background="#FFFFFF"
-                    android:padding="0dp"
-                    android:textColor="#000000"
-                    android:scrollbars="vertical" />
-            </FrameLayout>
+                    <ImageView
+                        android:id="@+id/livePreviewImage"
+                        android:layout_width="384px"
+                        android:layout_height="wrap_content"
+                        android:background="#FFFFFF"
+                        android:adjustViewBounds="true"
+                        android:scaleType="fitStart"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/livePreview"
+                        android:layout_width="384px"
+                        android:layout_height="wrap_content"
+                        android:background="#FFFFFF"
+                        android:padding="0dp"
+                        android:textColor="#000000" />
+                </FrameLayout>
+            </com.example.sunmiprinttest.MaxHeightScrollView>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -236,11 +243,20 @@
                     android:paddingHorizontal="24dp"
                     android:paddingVertical="16dp" />
 
+                <EditText
+                    android:id="@+id/entranceQuantityField"
+                    android:layout_width="56dp"
+                    android:layout_height="wrap_content"
+                    android:inputType="number"
+                    android:text="1"
+                    android:gravity="center"
+                    android:layout_marginEnd="8dp" />
+
                 <Button
-                    android:id="@+id/btnTestEmoji"
+                    android:id="@+id/btnEntrance"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/btn_test_emoji"
+                    android:text="@string/btn_entrance"
                     android:enabled="false"
                     android:textSize="18sp"
                     android:paddingHorizontal="24dp"
