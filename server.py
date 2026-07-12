@@ -2,14 +2,14 @@ import socket
 import json
 import threading
 import tkinter as tk
-from tkinter import messagebox
+from tkinter import messagebox, ttk
 from datetime import datetime
 
 class SunmiServerGUI:
     def __init__(self, root):
         self.root = root
         self.root.title("Sunmi Remote Print Server")
-        self.root.geometry("450x650")
+        self.root.geometry("500x750")
 
         self.client_socket = None
         self.server_running = True
@@ -23,18 +23,18 @@ class SunmiServerGUI:
         self.ip_label = tk.Label(root, text=f"Local IP: {self.get_local_ip()}", font=("Arial", 9))
         self.ip_label.pack()
 
-        # Mode Selection
-        tk.Label(root, text="Print Mode:", font=("Arial", 10, "bold")).pack(anchor="w", padx=20, pady=(10,0))
-        self.mode_var = tk.StringVar(value="normal")
-        mode_frame = tk.Frame(root)
-        mode_frame.pack(anchor="w", padx=20)
-        tk.Radiobutton(mode_frame, text="Normal", variable=self.mode_var, value="normal", command=self.update_ui_state).pack(side="left")
-        tk.Radiobutton(mode_frame, text="B.A.N.U.S.U.G.E (Alert)", variable=self.mode_var, value="alert", command=self.update_ui_state).pack(side="left")
+        # Format Selection
+        tk.Label(root, text="Print Format:", font=("Arial", 10, "bold")).pack(anchor="w", padx=20, pady=(10,0))
+        self.format_var = tk.StringVar(value="Plain")
+        self.format_combo = ttk.Combobox(root, textvariable=self.format_var, state="readonly")
+        self.format_combo['values'] = ("Plain", "Centered", "Boxed", "Header + Body", "Banner", "List", "Barcode", "QR Code", "Image", "B.A.N.U.S.U.G.E Alert")
+        self.format_combo.pack(fill="x", padx=20, pady=5)
+        self.format_combo.bind("<<ComboboxSelected>>", self.update_ui_state)
 
         # Title Input
         self.title_label = tk.Label(root, text="Title:")
         self.title_label.pack(anchor="w", padx=20)
-        self.title_entry = tk.Entry(root, width=45)
+        self.title_entry = tk.Entry(root, width=50)
         self.title_entry.pack(pady=5)
         self.title_entry.insert(0, "Remote Print")
 
@@ -51,8 +51,9 @@ class SunmiServerGUI:
         self.center_title_cb.pack(anchor="w", padx=20)
 
         # Content Input
-        tk.Label(root, text="Content / Alert Code:").pack(anchor="w", padx=20, pady=(10, 0))
-        self.content_text = tk.Text(root, width=45, height=5)
+        self.content_label = tk.Label(root, text="Content / Data:")
+        self.content_label.pack(anchor="w", padx=20, pady=(10, 0))
+        self.content_text = tk.Text(root, width=50, height=5)
         self.content_text.pack(pady=5)
         self.content_text.insert("1.0", "Hello from the GUI server!")
 
@@ -87,21 +88,43 @@ class SunmiServerGUI:
         # Start server thread
         threading.Thread(target=self.start_socket_server, daemon=True).start()
 
-    def update_ui_state(self):
-        is_alert = (self.mode_var.get() == "alert")
-        state = "disabled" if is_alert else "normal"
-        self.title_entry.config(state=state)
-        self.title_size_entry.config(state=state)
-        self.center_title_cb.config(state=state)
-        self.content_size_entry.config(state=state)
+    def update_ui_state(self, event=None):
+        fmt = self.format_var.get()
+        is_alert = (fmt == "B.A.N.U.S.U.G.E Alert")
+        is_barcode = (fmt == "Barcode")
+        is_qr = (fmt == "QR Code")
+        is_image = (fmt == "Image")
+        is_list = (fmt == "List")
+        is_banner = (fmt == "Banner")
 
-        # In alert mode, content is just the code
+        # Reset states
+        self.title_entry.config(state="normal")
+        self.title_size_entry.config(state="normal")
+        self.center_title_cb.config(state="normal")
+        self.content_size_entry.config(state="normal")
+        self.content_text.config(state="normal")
+
         if is_alert:
+            self.title_entry.config(state="disabled")
+            self.title_size_entry.config(state="disabled")
+            self.center_title_cb.config(state="disabled")
+            self.content_size_entry.config(state="disabled")
             curr = self.content_text.get("1.0", tk.END).strip()
             if curr == "Hello from the GUI server!":
                 self.content_text.delete("1.0", tk.END)
                 self.content_text.insert("1.0", "6666")
+        elif is_barcode or is_qr:
+            self.title_size_entry.config(state="disabled")
+            self.content_size_entry.config(state="disabled")
+            self.content_label.config(text="Data:")
+        elif is_image:
+            self.title_entry.config(state="disabled")
+            self.title_size_entry.config(state="disabled")
+            self.center_title_cb.config(state="disabled")
+            self.content_size_entry.config(state="disabled")
+            self.content_label.config(text="Image URL or Base64:")
         else:
+            self.content_label.config(text="Content / Data:")
             curr = self.content_text.get("1.0", tk.END).strip()
             if curr == "6666":
                 self.content_text.delete("1.0", tk.END)
@@ -120,15 +143,19 @@ class SunmiServerGUI:
     def start_socket_server(self):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        server.bind(('0.0.0.0', 8080))
-        server.listen(1)
+        try:
+            server.bind(('0.0.0.0', 8080))
+            server.listen(1)
+        except Exception as e:
+            print(f"Server error: {e}")
+            return
 
         while self.server_running:
-            conn, addr = server.accept()
-            self.client_socket = conn
-            self.root.after(0, self.on_client_connected, addr)
-
             try:
+                conn, addr = server.accept()
+                self.client_socket = conn
+                self.root.after(0, self.on_client_connected, addr)
+
                 with conn:
                     while self.server_running:
                         data = conn.recv(1024)
@@ -153,22 +180,32 @@ class SunmiServerGUI:
             return
 
         try:
-            mode = self.mode_var.get()
-            job = {
-                "type": mode,
-                "content": self.content_text.get("1.0", tk.END).strip(),
-                "linesAfter": int(self.lines_after_entry.get() or 3),
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            fmt = self.format_var.get()
+            # Map GUI strings to type keys for Android
+            type_map = {
+                "Plain": "plain",
+                "Centered": "centered",
+                "Boxed": "boxed",
+                "Header + Body": "header_body",
+                "Banner": "banner",
+                "List": "list",
+                "Barcode": "barcode",
+                "QR Code": "qr",
+                "Image": "image",
+                "B.A.N.U.S.U.G.E Alert": "alert"
             }
 
-            if mode == "normal":
-                job.update({
-                    "title": self.title_entry.get(),
-                    "titleSize": int(self.title_size_entry.get() or 40),
-                    "contentSize": int(self.content_size_entry.get() or 28),
-                    "centerTitle": self.center_title_var.get(),
-                    "alignment": self.alignment_var.get()
-                })
+            job = {
+                "type": type_map.get(fmt, "plain"),
+                "content": self.content_text.get("1.0", tk.END).strip(),
+                "linesAfter": int(self.lines_after_entry.get() or 3),
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "title": self.title_entry.get(),
+                "titleSize": int(self.title_size_entry.get() or 40),
+                "contentSize": int(self.content_size_entry.get() or 28),
+                "centerTitle": self.center_title_var.get(),
+                "alignment": self.alignment_var.get()
+            }
 
             message = json.dumps(job) + "\n"
             self.client_socket.sendall(message.encode('utf-8'))

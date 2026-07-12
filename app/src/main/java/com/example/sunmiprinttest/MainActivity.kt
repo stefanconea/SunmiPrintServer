@@ -4,10 +4,15 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.Typeface
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.os.RemoteException
 import android.text.Editable
 import android.text.Layout
@@ -20,6 +25,7 @@ import android.text.method.ScrollingMovementMethod
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.AlignmentSpan
 import android.text.style.StyleSpan
+import android.util.Base64
 import android.view.Gravity
 import android.view.Menu
 import android.view.MenuItem
@@ -28,6 +34,7 @@ import android.widget.AdapterView
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
@@ -36,6 +43,9 @@ import androidx.core.graphics.createBitmap
 import androidx.preference.PreferenceManager
 import androidx.appcompat.widget.Toolbar
 import com.google.gson.Gson
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.MultiFormatWriter
+import com.google.zxing.common.BitMatrix
 import com.sunmi.peripheral.printer.InnerPrinterCallback
 import com.sunmi.peripheral.printer.InnerPrinterException
 import com.sunmi.peripheral.printer.InnerPrinterManager
@@ -55,6 +65,7 @@ import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Collections
 import java.util.Date
@@ -72,7 +83,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: SharedPreferences
 
     private lateinit var statusText: TextView
-    private lateinit var hwStatusText: TextView
     private lateinit var btnConnect: Button
     private lateinit var httpServerInfo: TextView
     private lateinit var tcpServerInfo: TextView
@@ -85,10 +95,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var printModeSpinner: Spinner
     private lateinit var alignmentSpinner: Spinner
     private lateinit var livePreview: TextView
+    private lateinit var livePreviewImage: ImageView
+    private lateinit var hwStatusText: TextView
     private lateinit var testEmojiButton: Button
 
     private var currentPrinterStatus: Int = 1 // 1 = Ready
     private var isMonitoringStatus = false
+
+    private val previewHandler = Handler(Looper.getMainLooper())
+    private var previewRunnable: Runnable? = null
+    private var previewCounter = 0
 
     private val printerCallback = object : InnerPrinterCallback() {
         override fun onConnected(service: SunmiPrinterService) {
@@ -113,7 +129,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     data class PrintJob(
-        val type: String? = null,
+        val type: String? = "plain", // plain, centered, boxed, header_body, banner, list, barcode, qr, image, alert
         val title: String? = null,
         val content: String? = null,
         val text: String? = null,
@@ -150,6 +166,7 @@ class MainActivity : AppCompatActivity() {
         printModeSpinner = findViewById(R.id.printModeSpinner)
         alignmentSpinner = findViewById(R.id.alignmentSpinner)
         livePreview = findViewById(R.id.livePreview)
+        livePreviewImage = findViewById(R.id.livePreviewImage)
         testEmojiButton = findViewById(R.id.btnTestEmoji)
 
         livePreview.movementMethod = ScrollingMovementMethod()
@@ -246,28 +263,26 @@ class MainActivity : AppCompatActivity() {
         isMonitoringStatus = true
         thread {
             while (isMonitoringStatus) {
-                val service = printerService
-                if (service != null) {
-                    try {
-                        currentPrinterStatus = service.updatePrinterState()
-                        val statusStr = when (currentPrinterStatus) {
-                            1 -> "Ready"
-                            2 -> "Preparing"
-                            3 -> "Comms Error"
-                            4 -> "No Paper"
-                            5 -> "Overheated"
-                            6 -> "Door Open"
-                            7 -> "Cutter Error"
-                            else -> "Error ($currentPrinterStatus)"
-                        }
-                        val colorStr = if (currentPrinterStatus == 1) "#388E3C" else "#D32F2F"
-                        runOnUiThread {
-                            hwStatusText.text = "[$statusStr]"
-                            hwStatusText.setTextColor(Color.parseColor(colorStr))
-                        }
-                    } catch (_: RemoteException) {
-                        isMonitoringStatus = false
+                val service = printerService ?: break
+                try {
+                    currentPrinterStatus = service.updatePrinterState()
+                    val statusStr = when (currentPrinterStatus) {
+                        1 -> "Ready"
+                        2 -> "Preparing"
+                        3 -> "Comms Error"
+                        4 -> "No Paper"
+                        5 -> "Overheated"
+                        6 -> "Door Open"
+                        7 -> "Cutter Error"
+                        else -> "Error ($currentPrinterStatus)"
                     }
+                    val colorStr = if (currentPrinterStatus == 1) "#388E3C" else "#D32F2F"
+                    runOnUiThread {
+                        hwStatusText.text = "[$statusStr]"
+                        hwStatusText.setTextColor(Color.parseColor(colorStr))
+                    }
+                } catch (_: RemoteException) {
+                    isMonitoringStatus = false
                 }
                 Thread.sleep(2000)
             }
@@ -308,7 +323,7 @@ class MainActivity : AppCompatActivity() {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({
-                                        type: isAlert ? 'alert' : 'normal',
+                                        type: isAlert ? 'alert' : 'plain',
                                         title: document.getElementById('title').value,
                                         content: document.getElementById('content').value,
                                         linesAfter: 3
@@ -331,13 +346,13 @@ class MainActivity : AppCompatActivity() {
                     session.parseBody(map)
                     val json = map["postData"] ?: session.queryParameterString
                     val job = gson.fromJson(json, PrintJob::class.java)
-                    runOnUiThread { remotePrint(job) }
+                    runOnUiThread { processJob(job) }
                     return newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"ok\"}")
                 } catch (e: Exception) {
                     return try {
                         val body = session.inputStream.bufferedReader().readText()
                         val job = gson.fromJson(body, PrintJob::class.java)
-                        runOnUiThread { remotePrint(job) }
+                        runOnUiThread { processJob(job) }
                         newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"ok\"}")
                     } catch (_: Exception) {
                         newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Error: ${e.message}")
@@ -385,7 +400,6 @@ class MainActivity : AppCompatActivity() {
                         
                         val data = buffer.copyOfRange(0, bytesRead)
                         
-                        // Check for ESC/POS Status Request: DLE EOT n (10 04 n)
                         if (bytesRead >= 3 && data[0].toInt() == 0x10 && data[1].toInt() == 0x04) {
                             val n = data[2].toInt()
                             val response = getStatusResponse(n)
@@ -397,7 +411,6 @@ class MainActivity : AppCompatActivity() {
 
                         LogManager.addLog("Received $bytesRead bytes from HA")
                         
-                        // Smarter extraction: Skip ESC (27) and GS (29) command bytes
                         val cleanOutput = StringBuilder()
                         var i = 0
                         while (i < data.size) {
@@ -415,7 +428,7 @@ class MainActivity : AppCompatActivity() {
                         val finalContent = cleanOutput.toString().replace(Regex("\\s+"), " ").trim()
                         if (finalContent.isNotEmpty()) {
                             LogManager.addLog("Printing cleaned HA job: ${finalContent.take(20)}...")
-                            runOnUiThread { remotePrint(PrintJob(content = finalContent)) }
+                            runOnUiThread { processJob(PrintJob(content = finalContent)) }
                         }
                     }
                 } catch (e: Exception) {
@@ -429,9 +442,9 @@ class MainActivity : AppCompatActivity() {
 
         private fun getStatusResponse(n: Int): Int {
             return when (n) {
-                1 -> if (currentPrinterStatus == 1) 0x12 else 0x1E // Printer status (Online/Offline)
-                2 -> if (currentPrinterStatus == 6) 0x16 else 0x12 // Offline cause (Door open/closed)
-                4 -> if (currentPrinterStatus == 4) 0x72 else 0x12 // Paper sensor (Empty/Present)
+                1 -> if (currentPrinterStatus == 1) 0x12 else 0x1E
+                2 -> if (currentPrinterStatus == 6) 0x16 else 0x12
+                4 -> if (currentPrinterStatus == 4) 0x72 else 0x12
                 else -> 0x12
             }
         }
@@ -463,9 +476,9 @@ class MainActivity : AppCompatActivity() {
                     LogManager.addLog("MQTT message received on topic $topic")
                     try {
                         val job = gson.fromJson(payload, PrintJob::class.java)
-                        runOnUiThread { remotePrint(job) }
+                        runOnUiThread { processJob(job) }
                     } catch (_: Exception) {
-                        runOnUiThread { remotePrint(PrintJob(content = payload)) }
+                        runOnUiThread { processJob(PrintJob(content = payload)) }
                     }
                 }
 
@@ -499,9 +512,9 @@ class MainActivity : AppCompatActivity() {
                         val line = reader.readLine() ?: break
                         try {
                             val job = gson.fromJson(line, PrintJob::class.java)
-                            runOnUiThread { remotePrint(job) }
+                            runOnUiThread { processJob(job) }
                         } catch (_: Exception) {
-                            runOnUiThread { remotePrint(PrintJob(content = line)) }
+                            runOnUiThread { processJob(PrintJob(content = line)) }
                         }
                     }
                 } catch (e: Exception) {
@@ -552,93 +565,170 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updatePreview() {
-        val isAlertMode = printModeSpinner.selectedItemPosition == 1
-        livePreview.gravity = if (isAlertMode) Gravity.CENTER_HORIZONTAL else Gravity.START
+        val modeIndex = printModeSpinner.selectedItemPosition
+        val mode = getModeKey(modeIndex)
+        val title = titleField.text.toString()
+        val content = inputField.text.toString()
+        val isTitleCentered = centerTitleCheckBox.isChecked
+        val alignment = alignmentSpinner.selectedItemPosition
 
-        val builder = if (isAlertMode) {
-            val content = inputField.text.toString().ifEmpty { "6666" }
-            generateBanuSugeAlertBuilder(content)
-        } else {
-            val title = titleField.text.toString()
-            val content = inputField.text.toString()
-            val titleSize = titleSizeField.text.toString().toIntOrNull() ?: 32
-            val contentSize = textSizeField.text.toString().toIntOrNull() ?: 26
-            val bodyAlignment = if (alignmentSpinner.selectedItemPosition == 1) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
+        val isEmpty = title.trim().isEmpty() && content.trim().isEmpty()
+        val myId = ++previewCounter
 
-            val b = SpannableStringBuilder()
-            if (title.isNotEmpty()) {
-                val start = b.length
-                b.append(title).append("\n")
-                b.setSpan(AbsoluteSizeSpan(titleSize), start, b.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-                if (centerTitleCheckBox.isChecked) {
-                    b.setSpan(AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER), start, b.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-                }
-            }
-            if (content.isNotEmpty()) {
-                val start = b.length
-                b.append(content)
-                b.setSpan(AbsoluteSizeSpan(contentSize), start, b.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-                b.setSpan(AlignmentSpan.Standard(bodyAlignment), start, b.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            }
-            b
+        // 1. Handle empty state immediately on UI thread
+        if (isEmpty && mode != "alert") {
+            val r = previewRunnable
+            if (r != null) previewHandler.removeCallbacks(r)
+            livePreviewImage.visibility = View.GONE
+            livePreview.visibility = View.VISIBLE
+            livePreview.text = ""
+            return
         }
 
-        livePreview.setBackgroundColor(Color.WHITE)
-        livePreview.setTextColor(Color.BLACK)
-        livePreview.text = builder
+        // 2. Debounce complex rendering (wait for user to stop typing/deleting)
+        val r = previewRunnable
+        if (r != null) previewHandler.removeCallbacks(r)
+        
+        val job = PrintJob(
+            type = mode,
+            title = title,
+            content = content,
+            titleSize = titleSizeField.text.toString().toIntOrNull() ?: 32,
+            contentSize = textSizeField.text.toString().toIntOrNull() ?: 26,
+            centerTitle = isTitleCentered,
+            alignment = alignment
+        )
+
+        previewRunnable = Runnable {
+            thread {
+                val bitmap = renderJobToBitmap(job)
+                runOnUiThread {
+                    // ONLY update if this is still the most recent request
+                    if (myId != previewCounter) return@runOnUiThread
+                    
+                    // Extra safety: double check empty state
+                    val currentEmpty = titleField.text.toString().trim().isEmpty() && 
+                                     inputField.text.toString().trim().isEmpty()
+                    
+                    if (currentEmpty && mode != "alert") {
+                        livePreviewImage.visibility = View.GONE
+                        livePreview.visibility = View.VISIBLE
+                        livePreview.text = ""
+                        return@runOnUiThread
+                    }
+
+                    if (mode in listOf("barcode", "qr", "image", "boxed", "banner")) {
+                        livePreview.visibility = View.GONE
+                        livePreviewImage.visibility = View.VISIBLE
+                        livePreviewImage.setImageBitmap(bitmap)
+                    } else {
+                        livePreviewImage.visibility = View.GONE
+                        livePreview.visibility = View.VISIBLE
+                        livePreview.text = generateStyledBuilder(job)
+                        livePreview.gravity = if (mode == "centered" || mode == "alert") Gravity.CENTER_HORIZONTAL else Gravity.START
+                    }
+                }
+            }
+        }
+        
+        previewHandler.postDelayed(previewRunnable!!, 200)
+    }
+
+    private fun getModeKey(index: Int): String {
+        return when (index) {
+            0 -> "plain"
+            1 -> "centered"
+            2 -> "boxed"
+            3 -> "header_body"
+            4 -> "banner"
+            5 -> "list"
+            6 -> "barcode"
+            7 -> "qr"
+            8 -> "image"
+            9 -> "alert"
+            else -> "plain"
+        }
     }
 
     private fun printThreeSmileyFaces() {
-        val builder = SpannableStringBuilder("😊😊😊")
-        builder.setSpan(AbsoluteSizeSpan(60), 0, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        renderAndPrint(builder, 3)
+        val job = PrintJob(type = "plain", content = "😊😊😊", contentSize = 60)
+        processJob(job)
     }
 
     private fun printFromFields() {
-        val isAlertMode = printModeSpinner.selectedItemPosition == 1
+        val modeIndex = printModeSpinner.selectedItemPosition
+        val mode = getModeKey(modeIndex)
         
-        if (isAlertMode) {
-            val content = inputField.text.toString().ifEmpty { "6666" }
-            val builder = generateBanuSugeAlertBuilder(content)
-            renderAndPrint(builder, 3)
-        } else {
-            val title = titleField.text.toString()
-            val content = inputField.text.toString()
-            val titleSize = titleSizeField.text.toString().toIntOrNull() ?: 32
-            val contentSize = textSizeField.text.toString().toIntOrNull() ?: 26
-            val linesAfter = prefs.getString("default_lines_after", "3")?.toIntOrNull() ?: 3
-            val isTitleCentered = centerTitleCheckBox.isChecked
-            val bodyAlignment = if (alignmentSpinner.selectedItemPosition == 1) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
+        val job = PrintJob(
+            type = mode,
+            title = titleField.text.toString(),
+            content = inputField.text.toString(),
+            titleSize = titleSizeField.text.toString().toIntOrNull() ?: 32,
+            contentSize = textSizeField.text.toString().toIntOrNull() ?: 26,
+            centerTitle = centerTitleCheckBox.isChecked,
+            alignment = alignmentSpinner.selectedItemPosition,
+            linesAfter = prefs.getString("default_lines_after", "3")?.toIntOrNull() ?: 3
+        )
+        processJob(job)
+    }
 
-            if (title.isEmpty() && content.isEmpty()) {
-                Toast.makeText(this, "Please enter some text", Toast.LENGTH_SHORT).show()
-                return
+    private fun processJob(job: PrintJob) {
+        thread {
+            val bitmap = renderJobToBitmap(job)
+            val linesAfter = job.linesAfter ?: 3
+            renderAndPrintBitmap(bitmap, linesAfter)
+        }
+    }
+
+    private fun generateStyledBuilder(job: PrintJob): SpannableStringBuilder {
+        val type = job.type ?: "plain"
+        if (type == "alert") return generateBanuSugeAlertBuilder(job.content ?: "6666", job.timestamp)
+        
+        val builder = SpannableStringBuilder()
+        val title = job.title ?: ""
+        val content = job.content ?: job.text ?: job.message ?: ""
+        val titleSize = job.titleSize ?: 32
+        val contentSize = job.contentSize ?: 26
+        val centerTitle = job.centerTitle ?: true
+        val alignment = if (job.alignment == 1 || type == "centered") Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
+
+        if (title.isNotEmpty()) {
+            val start = builder.length
+            builder.append(title).append("\n")
+            builder.setSpan(AbsoluteSizeSpan(titleSize), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (centerTitle || type == "centered") {
+                builder.setSpan(AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
-
-            val builder = SpannableStringBuilder()
-            if (title.isNotEmpty()) {
-                val start = builder.length
-                builder.append(title).append("\n")
-                builder.setSpan(AbsoluteSizeSpan(titleSize), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-                if (isTitleCentered) {
-                    builder.setSpan(AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (type == "header_body") {
+                builder.setSpan(StyleSpan(Typeface.BOLD), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+        
+        if (content.isNotEmpty()) {
+            val start = builder.length
+            if (type == "list") {
+                content.split("\n").forEach { line ->
+                    val lineStart = builder.length
+                    builder.append("• ").append(line).append("\n")
+                    builder.setSpan(AbsoluteSizeSpan(contentSize), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
-            }
-            if (content.isNotEmpty()) {
-                val start = builder.length
+            } else {
                 builder.append(content)
                 builder.setSpan(AbsoluteSizeSpan(contentSize), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-                builder.setSpan(AlignmentSpan.Standard(bodyAlignment), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                builder.setSpan(AlignmentSpan.Standard(alignment), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                if (type == "banner") {
+                    builder.setSpan(StyleSpan(Typeface.BOLD), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    builder.setSpan(AbsoluteSizeSpan(80), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
             }
-            renderAndPrint(builder, linesAfter)
         }
+        return builder
     }
 
     private fun generateBanuSugeAlertBuilder(content: String, sentTime: String? = null): SpannableStringBuilder {
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         val now = sdf.format(Date())
         val sent = sentTime ?: now
-        
         val builder = SpannableStringBuilder()
         val center = AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER)
         
@@ -653,13 +743,11 @@ class MainActivity : AppCompatActivity() {
         appendCentered("ALERT\n", 60, true)
         appendCentered("WARNING\n", 32)
         appendCentered("\n", 20) 
-
         appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20)
         appendCentered("\n", 5)
         appendCentered("${content.trim()}\n", 50, true)
         appendCentered("\n", 5)
         appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20)
-        
         appendCentered("\n", 15)
         appendCentered("* * * * * * *\n", 20)
         appendCentered("\n", 5)
@@ -667,58 +755,115 @@ class MainActivity : AppCompatActivity() {
         appendCentered("sent: $sent\nrecv: $now\n", 22)
         appendCentered("\n", 5)
         appendCentered("* * * * * * *\n", 20)
-        
         appendCentered("\n", 15)
         appendCentered("Thank you for using B.A.N.U.S.U.G.E\n", 26)
         appendCentered("(Background Alert Notification Utility for Security Updates & General Events)\n", 14)
-        
         return builder
     }
 
-    private fun remotePrint(job: PrintJob) {
-        if (job.type == "alert") {
-            val builder = generateBanuSugeAlertBuilder(job.content ?: job.text ?: job.message ?: "6666", job.timestamp)
-            renderAndPrint(builder, 3)
-            return
-        }
-
-        val builder = SpannableStringBuilder()
-        val title = job.title ?: ""
-        val content = job.content ?: job.text ?: job.message ?: ""
-        val titleSize = job.titleSize ?: 32
-        val contentSize = job.contentSize ?: 26
-        val linesAfter = job.linesAfter ?: 3
-        val centerTitle = job.centerTitle ?: true
-        val alignment = if (job.alignment == 1) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
-
-        if (title.isNotEmpty()) {
-            val start = builder.length
-            builder.append(title).append("\n")
-            builder.setSpan(AbsoluteSizeSpan(titleSize), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            if (centerTitle) {
-                builder.setSpan(AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+    private fun renderJobToBitmap(job: PrintJob): Bitmap {
+        val width = 384
+        val type = job.type ?: "plain"
+        
+        if (type == "image") {
+            return try {
+                val data = job.content ?: ""
+                val bitmap = if (data.startsWith("http")) {
+                    BitmapFactory.decodeStream(URL(data).openConnection().getInputStream())
+                } else {
+                    val decodedString = Base64.decode(data, Base64.DEFAULT)
+                    BitmapFactory.decodeByteArray(decodedString, 0, decodedString.size)
+                }
+                val scale = width.toFloat() / bitmap.width
+                Bitmap.createScaledBitmap(bitmap, width, (bitmap.height * scale).toInt(), true)
+            } catch (e: Exception) {
+                renderTextToBitmap(SpannableStringBuilder("Image Load Error: ${e.message}"), width)
             }
         }
-        if (content.isNotEmpty()) {
-            val start = builder.length
-            builder.append(content)
-            builder.setSpan(AbsoluteSizeSpan(contentSize), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            builder.setSpan(AlignmentSpan.Standard(alignment), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        
+        if (type == "qr" || type == "barcode") {
+            return try {
+                val format = if (type == "qr") BarcodeFormat.QR_CODE else BarcodeFormat.CODE_128
+                val qrWidth = if (type == "qr") 250 else 380
+                val qrHeight = if (type == "qr") 250 else 100
+                val bitMatrix: BitMatrix = MultiFormatWriter().encode(job.content ?: "0", format, qrWidth, qrHeight)
+                val bitmap = createBitmap(qrWidth, qrHeight, Bitmap.Config.RGB_565)
+                for (x in 0 until qrWidth) {
+                    for (y in 0 until qrHeight) {
+                        bitmap.setPixel(x, y, if (bitMatrix.get(x, y)) Color.BLACK else Color.WHITE)
+                    }
+                }
+                
+                val finalBitmap = createBitmap(width, qrHeight + 20, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(finalBitmap)
+                canvas.drawColor(Color.WHITE)
+                canvas.drawBitmap(bitmap, ((width - qrWidth) / 2).toFloat(), 10f, null)
+                finalBitmap
+            } catch (e: Exception) {
+                renderTextToBitmap(SpannableStringBuilder("$type Error: ${e.message}"), width)
+            }
         }
-        renderAndPrint(builder, linesAfter)
+
+        if (type == "boxed") {
+            val padding = 16
+            val innerWidth = width - (padding * 2)
+            val builder = generateStyledBuilder(job)
+            val innerBitmap = renderTextToBitmap(builder, innerWidth)
+
+            val boxedBitmap = createBitmap(width, innerBitmap.height + (padding * 2), Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(boxedBitmap)
+            canvas.drawColor(Color.WHITE)
+
+            val paint = Paint().apply {
+                color = Color.BLACK
+                style = Paint.Style.STROKE
+                strokeWidth = 4f
+            }
+
+            canvas.drawRect(
+                2f,
+                2f,
+                (width - 2).toFloat(),
+                (innerBitmap.height + (padding * 2) - 2).toFloat(),
+                paint
+            )
+
+            canvas.drawBitmap(innerBitmap, padding.toFloat(), padding.toFloat(), null)
+            return boxedBitmap
+        }
+
+        val builder = generateStyledBuilder(job)
+        return renderTextToBitmap(builder, width)
     }
 
-    private fun renderAndPrint(builder: SpannableStringBuilder, linesAfter: Int) {
-        val service = printerService ?: run {
-            Toast.makeText(this, R.string.status_disconnected, Toast.LENGTH_SHORT).show()
-            return
+    private fun renderTextToBitmap(builder: SpannableStringBuilder, width: Int): Bitmap {
+        val textPaint = TextPaint().apply {
+            color = Color.BLACK
+            isAntiAlias = true
         }
-        
+        val alignmentSpans = builder.getSpans(0, builder.length, AlignmentSpan::class.java)
+        val baseAlignment = if (alignmentSpans.any { it.alignment == Layout.Alignment.ALIGN_CENTER }) {
+            Layout.Alignment.ALIGN_CENTER
+        } else {
+            Layout.Alignment.ALIGN_NORMAL
+        }
+        val staticLayout = StaticLayout.Builder.obtain(builder, 0, builder.length, textPaint, width)
+            .setAlignment(baseAlignment)
+            .build()
+        val bitmap = createBitmap(width, staticLayout.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        canvas.drawColor(Color.WHITE)
+        staticLayout.draw(canvas)
+        return thresholdBitmap(bitmap)
+    }
+
+    private fun renderAndPrintBitmap(bitmap: Bitmap, linesAfter: Int) {
+        val service = printerService ?: return
         val resultCallback = object : InnerResultCallback() {
             override fun onRunResult(isSuccess: Boolean) {
                 runOnUiThread {
                     statusText.text = if (isSuccess) getString(R.string.status_done)
-                    else getString(R.string.status_error, "printer returned failure")
+                    else getString(R.string.status_error, "printer failure")
                 }
             }
             override fun onReturnString(result: String?) {}
@@ -729,39 +874,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         try {
-            statusText.text = getString(R.string.status_printing)
-
-            val width = 384
-            val textPaint = TextPaint().apply {
-                color = Color.BLACK
-                isAntiAlias = true
-            }
-            
-            // Check if any AlignmentSpan is present to decide on base alignment
-            val alignmentSpans = builder.getSpans(0, builder.length, AlignmentSpan::class.java)
-            val baseAlignment = if (alignmentSpans.any { it.alignment == Layout.Alignment.ALIGN_CENTER }) {
-                Layout.Alignment.ALIGN_CENTER
-            } else {
-                Layout.Alignment.ALIGN_NORMAL
-            }
-
-            val staticLayout = StaticLayout.Builder.obtain(builder, 0, builder.length, textPaint, width)
-                .setAlignment(baseAlignment)
-                .build()
-
-            val rawBitmap = createBitmap(width, staticLayout.height, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(rawBitmap)
-            canvas.drawColor(Color.WHITE)
-            staticLayout.draw(canvas)
-
-            val processedBitmap = thresholdBitmap(rawBitmap)
-
+            runOnUiThread { statusText.text = getString(R.string.status_printing) }
             service.printerInit(null)
-            service.printBitmap(processedBitmap, resultCallback)
+            service.printBitmap(bitmap, resultCallback)
             service.lineWrap(linesAfter, null)
-
         } catch (e: RemoteException) {
-            statusText.text = getString(R.string.status_error, e.message)
+            runOnUiThread { statusText.text = getString(R.string.status_error, e.message) }
         }
     }
 
@@ -780,7 +898,6 @@ class MainActivity : AppCompatActivity() {
                 val g = (color shr 8) and 0xff
                 val b = color and 0xff
                 val luminance = (0.299 * r + 0.587 * g + 0.114 * b).toInt()
-
                 val isFeature = luminance < 80
                 var isEdge = false
                 if (luminance < 250) {
@@ -806,7 +923,6 @@ class MainActivity : AppCompatActivity() {
                 resultPixels[i] = if (isFeature || isEdge) Color.BLACK else Color.WHITE
             }
         }
-        
         val out = createBitmap(width, height, Bitmap.Config.ARGB_8888)
         out.setPixels(resultPixels, 0, width, 0, 0, width, height)
         return out

@@ -22,7 +22,15 @@
         <item>Centered</item>
     </string-array>
     <string-array name="print_modes">
-        <item>Normal</item>
+        <item>Plain</item>
+        <item>Centered</item>
+        <item>Boxed</item>
+        <item>Header + Body</item>
+        <item>Banner</item>
+        <item>List</item>
+        <item>Barcode</item>
+        <item>QR Code</item>
+        <item>Image</item>
         <item>B.A.N.U.S.U.G.E Alert</item>
     </string-array>
     <string name="status_connecting">Connecting to printer…</string>

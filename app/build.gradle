@@ -57,4 +57,7 @@ dependencies {
     
     // Preferences
     implementation 'androidx.preference:preference-ktx:1.2.1'
+
+    // Barcode / QR Code
+    implementation 'com.google.zxing:core:3.5.3'
 }

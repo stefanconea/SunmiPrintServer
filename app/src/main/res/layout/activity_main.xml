@@ -195,11 +195,19 @@
 
             <FrameLayout
                 android:layout_width="wrap_content"
-                android:layout_height="250dp"
+                android:layout_height="350dp"
                 android:background="#999999"
                 android:padding="2dp"
                 android:layout_gravity="center_horizontal"
                 android:layout_marginBottom="16dp">
+
+                <ImageView
+                    android:id="@+id/livePreviewImage"
+                    android:layout_width="384px"
+                    android:layout_height="match_parent"
+                    android:background="#FFFFFF"
+                    android:scaleType="matrix"
+                    android:visibility="gone" />
 
                 <TextView
                     android:id="@+id/livePreview"
