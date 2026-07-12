@@ -1,11 +1,13 @@
 package com.example.sunmiprinttest
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Typeface
+import androidx.core.graphics.createBitmap
 import android.os.Bundle
 import android.os.RemoteException
 import android.text.Editable
@@ -48,7 +50,6 @@ import org.eclipse.paho.client.mqttv3.MqttMessage
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import java.io.BufferedReader
 import java.io.InputStreamReader
-import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
@@ -108,8 +109,8 @@ class MainActivity : AppCompatActivity() {
         val type: String? = null,
         val title: String? = null,
         val content: String? = null,
-        val text: String? = null, // Support for ha-receipt_printer key
-        val message: String? = null, // Alternative common key
+        val text: String? = null,
+        val message: String? = null,
         val titleSize: Int? = null,
         val contentSize: Int? = null,
         val centerTitle: Boolean? = null,
@@ -118,6 +119,7 @@ class MainActivity : AppCompatActivity() {
         val timestamp: String? = null
     )
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -145,6 +147,7 @@ class MainActivity : AppCompatActivity() {
         livePreview.movementMethod = ScrollingMovementMethod()
         livePreview.setOnTouchListener { v, _ ->
             v.parent.requestDisallowInterceptTouchEvent(true)
+            v.performClick()
             false
         }
 
@@ -185,18 +188,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun startHttpServer() {
         val ip = getLocalIpAddress()
-        httpServerInfo.text = "HTTP Server: http://$ip:8081/print"
+        val info = "HTTP Server: http://$ip:8081/print"
+        httpServerInfo.text = info
         httpServer = AppHttpServer(8081)
         try {
             httpServer?.start()
         } catch (e: Exception) {
-            httpServerInfo.text = "HTTP Server Error: ${e.message}"
+            val err = "HTTP Server Error: ${e.message}"
+            httpServerInfo.text = err
         }
     }
 
     private fun startEscPosServer() {
         val ip = getLocalIpAddress()
-        tcpServerInfo.text = "TCP ESC/POS: $ip:9100"
+        val info = "TCP ESC/POS: $ip:9100"
+        tcpServerInfo.text = info
         escPosServer = EscPosServer(9100)
         escPosServer?.start()
     }
@@ -223,7 +229,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-        } catch (ex: Exception) { }
+        } catch (_: Exception) { }
         return "0.0.0.0"
     }
 
@@ -287,13 +293,13 @@ class MainActivity : AppCompatActivity() {
                     runOnUiThread { remotePrint(job) }
                     return newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"ok\"}")
                 } catch (e: Exception) {
-                    try {
+                    return try {
                         val body = session.inputStream.bufferedReader().readText()
                         val job = gson.fromJson(body, PrintJob::class.java)
                         runOnUiThread { remotePrint(job) }
-                        return newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"ok\"}")
-                    } catch (e2: Exception) {
-                        return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Error: ${e.message}")
+                        newFixedLengthResponse(Response.Status.OK, "application/json", "{\"status\":\"ok\"}")
+                    } catch (_: Exception) {
+                        newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Error: ${e.message}")
                     }
                 }
             }
@@ -313,10 +319,10 @@ class MainActivity : AppCompatActivity() {
                         reuseAddress = true
                         bind(InetSocketAddress(port))
                     }
-                    LogManager.addLog("ESC/POS Server started on port $port")
+                    LogManager.addLog("ESC/POS Server listening on port $port")
                     while (running) {
                         val client = serverSocket?.accept() ?: break
-                        LogManager.addLog("Client connected: ${client.inetAddress.hostAddress}")
+                        LogManager.addLog("HA Connection established: ${client.inetAddress.hostAddress}")
                         handleClient(client)
                     }
                 } catch (e: Exception) {
@@ -328,54 +334,39 @@ class MainActivity : AppCompatActivity() {
         private fun handleClient(socket: Socket) {
             thread {
                 try {
-                    socket.soTimeout = 5000 // 5 second timeout for reading
                     val inputStream = socket.getInputStream()
-                    val outputStream = SpannableStringBuilder()
-                    val buffer = ByteArray(8192)
+                    val buffer = ByteArray(16384)
                     
-                    var bytesRead: Int
-                    while (true) {
-                        bytesRead = inputStream.read(buffer)
+                    while (socket.isConnected && !socket.isClosed) {
+                        val bytesRead = inputStream.read(buffer)
                         if (bytesRead == -1) break
                         
-                        val chunk = buffer.copyOfRange(0, bytesRead)
-                        LogManager.addLog("Received $bytesRead bytes")
+                        val data = buffer.copyOfRange(0, bytesRead)
+                        LogManager.addLog("Received $bytesRead bytes from HA")
                         
-                        // Extraction: Filter for printable text and newlines
-                        val text = chunk.map { 
+                        val text = data.map { 
                             val b = it.toInt() and 0xFF
                             if (b in 32..126 || b == 10 || b == 13) b.toChar() else ' ' 
-                        }
-                            .joinToString("")
+                        }.joinToString("")
                         
-                        outputStream.append(text)
-                        
-                        // If we haven't received anything for a bit, consider it a complete job
-                        if (inputStream.available() == 0) {
-                            Thread.sleep(100) // Small wait for any trailing packets
-                            if (inputStream.available() == 0) break
+                        val cleanedText = text.replace(Regex("\\s+"), " ").trim()
+                        if (cleanedText.isNotEmpty()) {
+                            LogManager.addLog("Printing HA job: ${cleanedText.take(20)}...")
+                            runOnUiThread { remotePrint(PrintJob(content = cleanedText)) }
                         }
-                    }
-                    
-                    val finalContent = outputStream.toString().replace(Regex("\\s+"), " ").trim()
-                    if (finalContent.isNotEmpty()) {
-                        LogManager.addLog("Print job: ${finalContent.take(30)}...")
-                        runOnUiThread { remotePrint(PrintJob(content = finalContent)) }
-                    } else {
-                        LogManager.addLog("No printable text found in data stream")
                     }
                 } catch (e: Exception) {
-                    LogManager.addLog("Client error: ${e.message}")
+                    LogManager.addLog("ESC/POS Client Error: ${e.message}")
                 } finally {
-                    try { socket.close() } catch (e: Exception) {}
-                    LogManager.addLog("Connection closed")
+                    try { socket.close() } catch (_: Exception) {}
+                    LogManager.addLog("HA Connection closed")
                 }
             }
         }
 
         fun stop() {
             running = false
-            try { serverSocket?.close() } catch (e: Exception) {}
+            try { serverSocket?.close() } catch (_: Exception) {}
         }
     }
 
@@ -392,7 +383,7 @@ class MainActivity : AppCompatActivity() {
             mqttClient?.setCallback(object : MqttCallback {
                 override fun connectionLost(cause: Throwable?) {
                     LogManager.addLog("MQTT connection lost: ${cause?.message}")
-                    thread { Thread.sleep(5000); connectMqtt() } // Auto-reconnect
+                    thread { Thread.sleep(5000); connectMqtt() }
                 }
 
                 override fun messageArrived(topic: String?, message: MqttMessage?) {
@@ -401,7 +392,7 @@ class MainActivity : AppCompatActivity() {
                     try {
                         val job = gson.fromJson(payload, PrintJob::class.java)
                         runOnUiThread { remotePrint(job) }
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         runOnUiThread { remotePrint(PrintJob(content = payload)) }
                     }
                 }
@@ -428,7 +419,7 @@ class MainActivity : AppCompatActivity() {
                 try {
                     val socket = Socket(ip, port)
                     tcpSocket = socket
-                    runOnUiThread { btnConnect.text = "Disconnect" }
+                    runOnUiThread { btnConnect.text = getString(R.string.btn_disconnect) }
                     LogManager.addLog("Connected to desktop server at $ip")
 
                     val reader = BufferedReader(InputStreamReader(socket.getInputStream()))
@@ -437,7 +428,7 @@ class MainActivity : AppCompatActivity() {
                         try {
                             val job = gson.fromJson(line, PrintJob::class.java)
                             runOnUiThread { remotePrint(job) }
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             runOnUiThread { remotePrint(PrintJob(content = line)) }
                         }
                     }
@@ -449,7 +440,7 @@ class MainActivity : AppCompatActivity() {
                 } finally {
                     runOnUiThread {
                         tcpSocket = null
-                        btnConnect.text = "Connect"
+                        btnConnect.text = getString(R.string.btn_connect)
                     }
                 }
             }
@@ -457,7 +448,7 @@ class MainActivity : AppCompatActivity() {
             thread {
                 tcpSocket?.close()
                 tcpSocket = null
-                runOnUiThread { btnConnect.text = "Connect" }
+                runOnUiThread { btnConnect.text = getString(R.string.btn_connect) }
                 LogManager.addLog("Disconnected from desktop server")
             }
         }
@@ -587,12 +578,10 @@ class MainActivity : AppCompatActivity() {
             builder.setSpan(center, start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
 
-        // Header
         appendCentered("ALERT\n", 60, true)
         appendCentered("WARNING\n", 32)
         appendCentered("\n", 20) 
 
-        // First Dash
         appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20)
         appendCentered("\n", 5)
         appendCentered("${content.trim()}\n", 50, true)
@@ -676,7 +665,6 @@ class MainActivity : AppCompatActivity() {
                 isAntiAlias = true
             }
             
-            // Check if any AlignmentSpan is present to decide on base alignment
             val alignmentSpans = builder.getSpans(0, builder.length, AlignmentSpan::class.java)
             val baseAlignment = if (alignmentSpans.any { it.alignment == Layout.Alignment.ALIGN_CENTER }) {
                 Layout.Alignment.ALIGN_CENTER
@@ -688,7 +676,7 @@ class MainActivity : AppCompatActivity() {
                 .setAlignment(baseAlignment)
                 .build()
 
-            val rawBitmap = Bitmap.createBitmap(width, staticLayout.height, Bitmap.Config.ARGB_8888)
+            val rawBitmap = createBitmap(width, staticLayout.height, Bitmap.Config.ARGB_8888)
             val canvas = Canvas(rawBitmap)
             canvas.drawColor(Color.WHITE)
             staticLayout.draw(canvas)
@@ -746,7 +734,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         
-        val out = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val out = createBitmap(width, height, Bitmap.Config.ARGB_8888)
         out.setPixels(resultPixels, 0, width, 0, 0, width, height)
         return out
     }
@@ -758,8 +746,7 @@ class MainActivity : AppCompatActivity() {
         escPosServer?.stop()
         try {
             InnerPrinterManager.getInstance().unBindService(this, printerCallback)
-        } catch (e: InnerPrinterException) {
-            // ignore
+        } catch (_: InnerPrinterException) {
         }
         super.onDestroy()
     }
