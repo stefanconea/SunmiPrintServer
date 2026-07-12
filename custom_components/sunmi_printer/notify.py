@@ -79,6 +79,7 @@ PRINT_LIST_SCHEMA = {
 PRINT_ALERT_SCHEMA = {
     vol.Required("content"): cv.string,
     vol.Optional("timestamp"): cv.string,
+    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
 }
 
 PRINT_QR_SCHEMA = {
@@ -250,10 +251,18 @@ class SunmiPrinterNotifyEntity(NotifyEntity):
         )
 
     async def async_print_alert(
-        self, content: str, timestamp: str | None = None
+        self,
+        content: str,
+        timestamp: str | None = None,
+        lines_after: int = DEFAULT_LINES_AFTER,
     ) -> None:
         await self._client.async_print(
-            {"type": "alert", "content": content, "timestamp": timestamp}
+            {
+                "type": "alert",
+                "content": content,
+                "timestamp": timestamp,
+                "linesAfter": lines_after,
+            }
         )
 
     async def async_print_qr(
