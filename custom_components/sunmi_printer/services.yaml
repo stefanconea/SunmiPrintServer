@@ -334,3 +334,30 @@ print_raw:
         verbatim into the JSON body alongside "type".
       selector:
         object:
+
+print_guard_receipt:
+  name: Print guard receipt
+  description: >
+    Print a one-item POS-style entry ticket (company name, employee, POS
+    number, item, total, sequential receipt number). Company name and unit
+    price are configured on the device itself (Settings -> Guard Receipt),
+    not passed here -- call with no fields at all for the common case.
+  target: *notify_target
+  fields:
+    quantity:
+      name: Quantity
+      description: Number of entries to charge for on this ticket.
+      selector:
+        number:
+          min: 1
+          max: 50
+      default: 1
+    lines_after:
+      name: Lines after
+      description: >
+        Optional. If omitted, the app's own configured default (Settings ->
+        Lines After Content on the device, 3 by default) is used.
+      selector:
+        number:
+          min: 0
+          max: 20

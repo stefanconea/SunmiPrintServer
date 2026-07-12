@@ -34,4 +34,20 @@
             app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="Guard Receipt">
+        <EditTextPreference
+            app:defaultValue="Guard"
+            app:key="guard_company_name"
+            app:singleLine="true"
+            app:title="Company Name"
+            app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            app:defaultValue="50.00"
+            app:key="guard_price"
+            app:singleLine="true"
+            app:title="Price per Entry"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
 </PreferenceScreen>

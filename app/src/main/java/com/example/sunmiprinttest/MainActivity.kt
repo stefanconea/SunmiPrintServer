@@ -154,7 +154,8 @@ class MainActivity : AppCompatActivity() {
         val centerTitle: Boolean? = null,
         val alignment: Int? = null,
         val linesAfter: Int? = null,
-        val timestamp: String? = null
+        val timestamp: String? = null,
+        val quantity: Int? = null
     )
 
     @SuppressLint("ClickableViewAccessibility")
@@ -682,6 +683,7 @@ class MainActivity : AppCompatActivity() {
     private fun generateStyledBuilder(job: PrintJob): SpannableStringBuilder {
         val type = job.type ?: "plain"
         if (type == "alert") return generateBanuSugeAlertBuilder(job.content ?: "6666", job.timestamp)
+        if (type == "guard_receipt") return generateGuardReceiptBuilder(job.quantity ?: 1)
         val builder = SpannableStringBuilder()
         val title = job.title ?: ""; val content = job.content ?: job.text ?: job.message ?: ""
         val titleSize = job.titleSize ?: 32; val contentSize = job.contentSize ?: 26
@@ -735,6 +737,57 @@ class MainActivity : AppCompatActivity() {
         appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20); appendCentered("\n", 5); appendCentered("${content.trim()}\n", 50, true); appendCentered("\n", 5); appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20)
         appendCentered("\n", 15); appendCentered("* * * * * * *\n", 20); appendCentered("\n", 5); appendCentered("unknown\n", 26); appendCentered("sent: $sent\nrecv: $now\n", 22); appendCentered("\n", 5); appendCentered("* * * * * * *\n", 20)
         appendCentered("\n", 15); appendCentered("Thank you for using B.A.N.U.S.U.G.E\n", 26); appendCentered("(Background Alert Notification Utility for Security Updates & General Events)\n", 14)
+        return builder
+    }
+
+    private fun padRow(label: String, value: String, width: Int = 26): String {
+        val spaces = (width - label.length - value.length).coerceAtLeast(1)
+        return label + " ".repeat(spaces) + value
+    }
+
+    private fun formatMoney(value: Double): String =
+        String.format(Locale.getDefault(), "%.2f", value).replace('.', ',') + " lei"
+
+    private fun generateGuardReceiptBuilder(quantity: Int): SpannableStringBuilder {
+        val companyName = prefs.getString("guard_company_name", "Guard")?.takeIf { it.isNotBlank() } ?: "Guard"
+        val unitPrice = prefs.getString("guard_price", "50.00")?.replace(',', '.')?.toDoubleOrNull() ?: 50.0
+        val total = unitPrice * quantity
+
+        // Persisted across prints so receipts are sequentially numbered like a real POS.
+        val counter = prefs.getInt("guard_receipt_counter", 0) + 1
+        prefs.edit().putInt("guard_receipt_counter", counter).apply()
+
+        val sdf = SimpleDateFormat("dd-MM-yyyy hh:mm a", Locale.getDefault())
+        val now = sdf.format(Date())
+
+        val builder = SpannableStringBuilder()
+        val center = AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER)
+
+        val headerStart = builder.length
+        builder.append(companyName).append("\n")
+        builder.setSpan(AbsoluteSizeSpan(34), headerStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(StyleSpan(Typeface.BOLD), headerStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(center, headerStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+
+        val bodyStart = builder.length
+        builder.append("Employee: Owner\n")
+        builder.append("POS: POS 1\n")
+        builder.append("\n")
+        builder.append(padRow("Intrare interzisa", formatMoney(unitPrice))).append("\n")
+        builder.append("$quantity x ${formatMoney(unitPrice)}\n")
+        builder.append("\n")
+        val totalStart = builder.length
+        builder.append(padRow("Total", formatMoney(total))).append("\n")
+        val totalEnd = builder.length
+        builder.append(padRow("Cash", formatMoney(total))).append("\n")
+        builder.append("\n")
+        builder.append(now).append("\n")
+        builder.append("#1-%04d".format(counter)).append("\n")
+        builder.setSpan(AbsoluteSizeSpan(22), bodyStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(TypefaceSpan("monospace"), bodyStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(AbsoluteSizeSpan(30), totalStart, totalEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(StyleSpan(Typeface.BOLD), totalStart, totalEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+
         return builder
     }
 

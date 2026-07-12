@@ -38,13 +38,26 @@ immediately.
 - A **notify entity** per configured printer, for plain-text pushes via
   `notify.send_message` — the layout/lines-after used are configurable per
   device in the integration's Options.
-- Nine **`sunmi_printer.print_*` services**, one per print layout the
+- Ten **`sunmi_printer.print_*` services**, one per print layout the
   Android app supports: `print_text` (plain/centered/header_body),
   `print_boxed`, `print_banner`, `print_list`, `print_alert` (the
   B.A.N.U.S.U.G.E layout), `print_qr`, `print_barcode`, `print_image`
-  (by URL or by an HA `camera`/`image` entity snapshot), and `print_raw` —
-  an escape hatch that sends an arbitrary `type` + extra fields verbatim,
-  for device print types added after this integration was written.
+  (by URL or by an HA `camera`/`image` entity snapshot), `print_guard_receipt`
+  (a one-tap POS-style entry ticket — see below), and `print_raw` — an
+  escape hatch that sends an arbitrary `type` + extra fields verbatim, for
+  device print types added after this integration was written.
+
+### Guard receipt
+
+`sunmi_printer.print_guard_receipt` prints a one-item POS-style ticket
+(company name header, `Employee: Owner`, `POS: POS 1`, an `Intrare
+interzisa` line item, total, `Cash` line, timestamp, and a sequential
+receipt number like `#1-0006` persisted on the device). Company name and
+unit price are configured once on the device itself — **Settings → Guard
+Receipt** (`Company Name`, `Price per Entry`) — not passed per call, so the
+common case is calling the service with no fields at all. The only optional
+field is `quantity` (default `1`), for charging multiple entries on one
+ticket.
 
 All services target the printer's notify entity (`target: entity:`), so with
 multiple printers configured you just pick which one in the service call.

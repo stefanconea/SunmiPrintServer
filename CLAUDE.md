@@ -63,7 +63,7 @@ PrintJob (data class) → processJob() → renderJobToBitmap() → thresholdBitm
 - `PrintJob` is the universal internal representation — every protocol (HTTP JSON, TCP JSON
   from the desktop server, MQTT payload, raw ESC/POS bytes) gets normalized into one before
   rendering. `job.type` selects the layout: `plain`, `centered`, `boxed`, `header_body`,
-  `banner`, `list`, `barcode`, `qr`, `image`, `alert`.
+  `banner`, `list`, `barcode`, `qr`, `image`, `alert`, `guard_receipt`.
 - Text jobs go through `generateStyledBuilder()` (builds a `SpannableStringBuilder` with size/
   alignment/style spans) → `renderTextToBitmap()` (lays out with `StaticLayout` at fixed width
   384px) → `thresholdBitmap()` (converts to pure black/white with a simple edge-aware threshold,
@@ -78,6 +78,15 @@ PrintJob (data class) → processJob() → renderJobToBitmap() → thresholdBitm
 A specialized high-visibility layout (`generateBanuSugeAlertBuilder`) for security/alert
 notifications — large centered text with a fixed banner format. Treated as its own `PrintJob`
 type, not a variant of `plain`.
+
+### `guard_receipt` mode
+
+A fixed POS-style entry-ticket layout (`generateGuardReceiptBuilder`) — company name header,
+`Employee: Owner`, `POS: POS 1`, a single `Intrare interzisa` line item, total, `Cash` line,
+timestamp, and a sequential receipt number (`#1-%04d`) persisted via a `SharedPreferences`
+counter (`guard_receipt_counter`) so numbering survives across prints/app restarts. Company name
+(`guard_company_name`) and unit price (`guard_price`) are user-configurable in Settings, not
+passed per job — only `job.quantity` (default 1) varies the ticket (multiplies the line total).
 
 ### Three inbound protocols + one outbound
 
@@ -107,9 +116,10 @@ bypass the bitmap pipeline or the print executor.
 
 ### Settings
 
-User-configurable values (desktop server URL, MQTT broker/topic, default lines-after) live in
-`SharedPreferences` via `SettingsActivity`/`root_preferences.xml`, keyed by `desktop_server_url`,
-`mqtt_broker`, `mqtt_topic`, `default_lines_after`.
+User-configurable values (desktop server URL, MQTT broker/topic, default lines-after, guard
+receipt company name/price) live in `SharedPreferences` via `SettingsActivity`/
+`root_preferences.xml`, keyed by `desktop_server_url`, `mqtt_broker`, `mqtt_topic`,
+`default_lines_after`, `guard_company_name`, `guard_price`.
 
 ### Logging
 

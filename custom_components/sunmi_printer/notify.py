@@ -31,6 +31,7 @@ from .const import (
     SERVICE_PRINT_BANNER,
     SERVICE_PRINT_BARCODE,
     SERVICE_PRINT_BOXED,
+    SERVICE_PRINT_GUARD_RECEIPT,
     SERVICE_PRINT_IMAGE,
     SERVICE_PRINT_LIST,
     SERVICE_PRINT_QR,
@@ -105,6 +106,11 @@ PRINT_RAW_SCHEMA = {
     vol.Optional("data", default=dict): dict,
 }
 
+PRINT_GUARD_RECEIPT_SCHEMA = {
+    vol.Optional("quantity", default=1): cv.positive_int,
+    vol.Optional("lines_after"): cv.positive_int,
+}
+
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
@@ -139,6 +145,11 @@ async def async_setup_entry(
     )
     platform.async_register_entity_service(
         SERVICE_PRINT_RAW, PRINT_RAW_SCHEMA, "async_print_raw"
+    )
+    platform.async_register_entity_service(
+        SERVICE_PRINT_GUARD_RECEIPT,
+        PRINT_GUARD_RECEIPT_SCHEMA,
+        "async_print_guard_receipt",
     )
 
 
@@ -314,6 +325,20 @@ class SunmiPrinterNotifyEntity(NotifyEntity):
         job = {"type": type}
         job.update(data or {})
         await self._client.async_print(job)
+
+    async def async_print_guard_receipt(
+        self, quantity: int = 1, lines_after: int | None = None
+    ) -> None:
+        # Company name and unit price are configured on the device itself
+        # (Settings -> Guard Receipt), not passed per call -- this is meant to
+        # be a one-tap "print an entry ticket" action from Home Assistant.
+        await self._client.async_print(
+            {
+                "type": "guard_receipt",
+                "quantity": quantity,
+                "linesAfter": lines_after,
+            }
+        )
 
     # -- helpers --------------------------------------------------------------
 
