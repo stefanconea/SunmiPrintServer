@@ -113,16 +113,20 @@ User-configurable values (desktop server URL, MQTT broker/topic, default lines-a
 
 ### Logging
 
-`LogManager` is a tiny in-memory ring buffer (last 200 entries) with a listener callback, viewed
-via `LogsActivity`. Use `LogManager.addLog(...)` for anything a user would want to see in the
-in-app Logs screen (connection events, server errors) — not for routine debug output.
+Two separate ring-buffer loggers, each with its own listener-driven screen — don't conflate them:
 
-`processJob()`/`renderAndPrintBitmap()` take an optional `source` string identifying which
-inbound protocol submitted the job (`"HTTP Server"`, `"ESC/POS Server"`, `"MQTT"`,
-`"Desktop Server (Python)"`, or the default `"Local"` for in-app UI prints), and log a
-`[source] Print job succeeded/failed: ...` line for every job's outcome (including "printer not
-connected"). When adding a new inbound source, pass a `source` string through to `processJob()`
-so its jobs are attributable in the Logs screen.
+- `LogManager` (last 200 entries, viewed via `LogsActivity`/"Logs") — free-text server/connection
+  events (startup, connect/disconnect, server errors). Use `LogManager.addLog(...)` for anything
+  in that category, not for routine debug output.
+- `JobLogManager` (last 200 entries, viewed via `JobLogsActivity`/"Job Logs") — one structured,
+  numbered, timestamped entry per *print job*, independent of the general log. `processJob()`
+  calls `JobLogManager.startJob(source, type)` up front (so a job shows as "Pending" while still
+  queued on `printExecutor`) and gets back a `jobId`, which `renderAndPrintBitmap()` later closes
+  out via `JobLogManager.completeJob(jobId, success, message)` — including the "printer not
+  connected" case that used to silently drop with no trace at all. `source` is one of
+  `"HTTP Server"`, `"ESC/POS Server"`, `"MQTT"`, `"Desktop Server (Python)"`, or the default
+  `"Local"` for in-app UI prints. When adding a new inbound source, pass a `source` string through
+  to `processJob()` so its jobs are attributable in the Job Logs screen.
 
 ## Technical constraints
 

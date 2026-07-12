@@ -6,6 +6,10 @@
         android:title="Logs"
         app:showAsAction="never" />
     <item
+        android:id="@+id/action_job_logs"
+        android:title="Job Logs"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/action_settings"
         android:title="Settings"
         app:showAsAction="never" />

@@ -213,6 +213,10 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(this, LogsActivity::class.java))
                 return true
             }
+            R.id.action_job_logs -> {
+                startActivity(Intent(this, JobLogsActivity::class.java))
+                return true
+            }
         }
         return super.onOptionsItemSelected(item)
     }
@@ -654,11 +658,12 @@ class MainActivity : AppCompatActivity() {
         alignment = alignmentSpinner.selectedItemPosition, linesAfter = prefs.getString("default_lines_after", "3")?.toIntOrNull() ?: 3))
 
     private fun processJob(job: PrintJob, overrideBitmap: Bitmap? = null, source: String = "Local") {
+        val jobId = JobLogManager.startJob(source, job.type ?: "plain")
         printExecutor.submit {
             val bitmap = overrideBitmap ?: renderJobToBitmap(job)
             val linesAfter = job.linesAfter
                 ?: prefs.getString("default_lines_after", "3")?.toIntOrNull() ?: 3
-            renderAndPrintBitmap(bitmap, linesAfter, source)
+            renderAndPrintBitmap(bitmap, linesAfter, jobId)
         }
     }
 
@@ -769,19 +774,19 @@ class MainActivity : AppCompatActivity() {
         return thresholdBitmap(bitmap)
     }
 
-    private fun renderAndPrintBitmap(bitmap: Bitmap, linesAfter: Int, source: String = "Local") {
+    private fun renderAndPrintBitmap(bitmap: Bitmap, linesAfter: Int, jobId: Int = -1) {
         val service = printerService ?: run {
-            LogManager.addLog("[$source] Print job failed: printer not connected")
+            JobLogManager.completeJob(jobId, false, "printer not connected")
             return
         }
         val resultCallback = object : InnerResultCallback() {
             override fun onRunResult(isSuccess: Boolean) {
-                LogManager.addLog("[$source] Print job ${if (isSuccess) "succeeded" else "failed"}")
+                JobLogManager.completeJob(jobId, isSuccess, if (isSuccess) null else "printer failure")
                 runOnUiThread { statusText.text = if (isSuccess) getString(R.string.status_done) else getString(R.string.status_error, "printer failure") }
             }
             override fun onReturnString(result: String?) {}
             override fun onRaiseException(code: Int, msg: String?) {
-                LogManager.addLog("[$source] Print job failed: $msg")
+                JobLogManager.completeJob(jobId, false, msg)
                 runOnUiThread { statusText.text = getString(R.string.status_error, msg) }
             }
             override fun onPrintResult(code: Int, msg: String?) {}
@@ -791,7 +796,7 @@ class MainActivity : AppCompatActivity() {
             service.printBitmap(bitmap, resultCallback)
             if (linesAfter > 0) service.lineWrap(linesAfter, null)
         } catch (e: RemoteException) {
-            LogManager.addLog("[$source] Print job failed: ${e.message}")
+            JobLogManager.completeJob(jobId, false, e.message)
             runOnUiThread { statusText.text = getString(R.string.status_error, e.message) }
         }
     }
