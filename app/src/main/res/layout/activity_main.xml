@@ -206,7 +206,7 @@
                     android:layout_width="384px"
                     android:layout_height="match_parent"
                     android:background="#FFFFFF"
-                    android:scaleType="matrix"
+                    android:scaleType="fitStart"
                     android:visibility="gone" />
 
                 <TextView
