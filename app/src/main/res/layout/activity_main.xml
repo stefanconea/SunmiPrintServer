@@ -39,6 +39,15 @@
                     android:text="@string/status_connecting"
                     android:textSize="16sp" />
 
+                <TextView
+                    android:id="@+id/hwStatusText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="[Printer Ready]"
+                    android:textColor="#388E3C"
+                    android:textSize="14sp"
+                    android:layout_marginEnd="8dp" />
+
                 <Button
                     android:id="@+id/btnConnect"
                     android:layout_width="wrap_content"

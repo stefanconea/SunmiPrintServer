@@ -50,6 +50,7 @@ import org.eclipse.paho.client.mqttv3.MqttMessage
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.io.OutputStream
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
@@ -71,6 +72,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: SharedPreferences
 
     private lateinit var statusText: TextView
+    private lateinit var hwStatusText: TextView
     private lateinit var btnConnect: Button
     private lateinit var httpServerInfo: TextView
     private lateinit var tcpServerInfo: TextView
@@ -85,6 +87,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var livePreview: TextView
     private lateinit var testEmojiButton: Button
 
+    private var currentPrinterStatus: Int = 1 // 1 = Ready
+    private var isMonitoringStatus = false
+
     private val printerCallback = object : InnerPrinterCallback() {
         override fun onConnected(service: SunmiPrinterService) {
             printerService = service
@@ -93,10 +98,12 @@ class MainActivity : AppCompatActivity() {
                 printButton.isEnabled = true
                 testEmojiButton.isEnabled = true
             }
+            startStatusMonitoring()
         }
 
         override fun onDisconnected() {
             printerService = null
+            isMonitoringStatus = false
             runOnUiThread {
                 statusText.text = getString(R.string.status_disconnected)
                 printButton.isEnabled = false
@@ -130,6 +137,7 @@ class MainActivity : AppCompatActivity() {
         prefs = PreferenceManager.getDefaultSharedPreferences(this)
 
         statusText = findViewById(R.id.statusText)
+        hwStatusText = findViewById(R.id.hwStatusText)
         btnConnect = findViewById(R.id.btnConnect)
         httpServerInfo = findViewById(R.id.httpServerInfo)
         tcpServerInfo = findViewById(R.id.tcpServerInfo)
@@ -231,6 +239,39 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (_: Exception) { }
         return "0.0.0.0"
+    }
+
+    private fun startStatusMonitoring() {
+        if (isMonitoringStatus) return
+        isMonitoringStatus = true
+        thread {
+            while (isMonitoringStatus) {
+                val service = printerService
+                if (service != null) {
+                    try {
+                        currentPrinterStatus = service.updatePrinterState()
+                        val statusStr = when (currentPrinterStatus) {
+                            1 -> "Ready"
+                            2 -> "Preparing"
+                            3 -> "Comms Error"
+                            4 -> "No Paper"
+                            5 -> "Overheated"
+                            6 -> "Door Open"
+                            7 -> "Cutter Error"
+                            else -> "Error ($currentPrinterStatus)"
+                        }
+                        val colorStr = if (currentPrinterStatus == 1) "#388E3C" else "#D32F2F"
+                        runOnUiThread {
+                            hwStatusText.text = "[$statusStr]"
+                            hwStatusText.setTextColor(Color.parseColor(colorStr))
+                        }
+                    } catch (_: RemoteException) {
+                        isMonitoringStatus = false
+                    }
+                }
+                Thread.sleep(2000)
+            }
+        }
     }
 
     inner class AppHttpServer(port: Int) : NanoHTTPD(port) {
@@ -335,6 +376,7 @@ class MainActivity : AppCompatActivity() {
             thread {
                 try {
                     val inputStream = socket.getInputStream()
+                    val outputStream = socket.getOutputStream()
                     val buffer = ByteArray(16384)
                     
                     while (socket.isConnected && !socket.isClosed) {
@@ -342,6 +384,17 @@ class MainActivity : AppCompatActivity() {
                         if (bytesRead == -1) break 
                         
                         val data = buffer.copyOfRange(0, bytesRead)
+                        
+                        // Check for ESC/POS Status Request: DLE EOT n (10 04 n)
+                        if (bytesRead >= 3 && data[0].toInt() == 0x10 && data[1].toInt() == 0x04) {
+                            val n = data[2].toInt()
+                            val response = getStatusResponse(n)
+                            outputStream.write(response)
+                            outputStream.flush()
+                            LogManager.addLog("Responded to status query type $n with byte $response")
+                            continue
+                        }
+
                         LogManager.addLog("Received $bytesRead bytes from HA")
                         
                         // Smarter extraction: Skip ESC (27) and GS (29) command bytes
@@ -350,7 +403,6 @@ class MainActivity : AppCompatActivity() {
                         while (i < data.size) {
                             val b = data[i].toInt() and 0xFF
                             if (b == 0x1B || b == 0x1D) {
-                                // It's a command prefix (ESC or GS), skip it and the identifier byte
                                 i += 2 
                             } else {
                                 if (b in 32..126 || b == 10 || b == 13) {
@@ -372,6 +424,15 @@ class MainActivity : AppCompatActivity() {
                     try { socket.close() } catch (_: Exception) {}
                     LogManager.addLog("HA Connection closed")
                 }
+            }
+        }
+
+        private fun getStatusResponse(n: Int): Int {
+            return when (n) {
+                1 -> if (currentPrinterStatus == 1) 0x12 else 0x1E // Printer status (Online/Offline)
+                2 -> if (currentPrinterStatus == 6) 0x16 else 0x12 // Offline cause (Door open/closed)
+                4 -> if (currentPrinterStatus == 4) 0x72 else 0x12 // Paper sensor (Empty/Present)
+                else -> 0x12
             }
         }
 
