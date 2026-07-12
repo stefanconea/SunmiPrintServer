@@ -103,8 +103,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var titleField: EditText
     private lateinit var titleSizeField: EditText
     private lateinit var centerTitleCheckBox: CheckBox
+    private lateinit var boldTitleCheckBox: CheckBox
     private lateinit var inputField: EditText
     private lateinit var textSizeField: EditText
+    private lateinit var boldContentCheckBox: CheckBox
     private lateinit var printModeSpinner: Spinner
     private lateinit var alignmentSpinner: Spinner
     private lateinit var livePreview: TextView
@@ -152,6 +154,8 @@ class MainActivity : AppCompatActivity() {
         val titleSize: Int? = null,
         val contentSize: Int? = null,
         val centerTitle: Boolean? = null,
+        val boldTitle: Boolean? = null,
+        val boldContent: Boolean? = null,
         val alignment: Int? = null,
         val linesAfter: Int? = null,
         val timestamp: String? = null,
@@ -177,8 +181,10 @@ class MainActivity : AppCompatActivity() {
         titleField = findViewById(R.id.titleField)
         titleSizeField = findViewById(R.id.titleSizeField)
         centerTitleCheckBox = findViewById(R.id.centerTitleCheckBox)
+        boldTitleCheckBox = findViewById(R.id.boldTitleCheckBox)
         inputField = findViewById(R.id.inputField)
         textSizeField = findViewById(R.id.textSizeField)
+        boldContentCheckBox = findViewById(R.id.boldContentCheckBox)
         printModeSpinner = findViewById(R.id.printModeSpinner)
         alignmentSpinner = findViewById(R.id.alignmentSpinner)
         livePreview = findViewById(R.id.livePreview)
@@ -631,6 +637,8 @@ class MainActivity : AppCompatActivity() {
         titleField.addTextChangedListener(watcher); titleSizeField.addTextChangedListener(watcher)
         inputField.addTextChangedListener(watcher); textSizeField.addTextChangedListener(watcher)
         centerTitleCheckBox.setOnCheckedChangeListener { _, _ -> updatePreview() }
+        boldTitleCheckBox.setOnCheckedChangeListener { _, _ -> updatePreview() }
+        boldContentCheckBox.setOnCheckedChangeListener { _, _ -> updatePreview() }
         val spinnerListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p0: AdapterView<*>?, p1: View?, p2: Int, p3: Long) { updatePreview() }
             override fun onNothingSelected(p0: AdapterView<*>?) {}
@@ -650,7 +658,8 @@ class MainActivity : AppCompatActivity() {
         }
         previewRunnable?.let { previewHandler.removeCallbacks(it) }
         val job = PrintJob(type = mode, title = title, content = content, titleSize = titleSizeField.text.toString().toIntOrNull() ?: 32,
-            contentSize = textSizeField.text.toString().toIntOrNull() ?: 26, centerTitle = isTitleCentered, alignment = alignment)
+            contentSize = textSizeField.text.toString().toIntOrNull() ?: 26, centerTitle = isTitleCentered,
+            boldTitle = boldTitleCheckBox.isChecked, boldContent = boldContentCheckBox.isChecked, alignment = alignment)
         previewRunnable = Runnable { thread {
             val bitmap = renderJobToBitmap(job)
             runOnUiThread {
@@ -682,6 +691,7 @@ class MainActivity : AppCompatActivity() {
     private fun printFromFields() = processJob(PrintJob(type = getModeKey(printModeSpinner.selectedItemPosition),
         title = titleField.text.toString(), content = inputField.text.toString(), titleSize = titleSizeField.text.toString().toIntOrNull() ?: 32,
         contentSize = textSizeField.text.toString().toIntOrNull() ?: 26, centerTitle = centerTitleCheckBox.isChecked,
+        boldTitle = boldTitleCheckBox.isChecked, boldContent = boldContentCheckBox.isChecked,
         alignment = alignmentSpinner.selectedItemPosition, linesAfter = prefs.getString("default_lines_after", "3")?.toIntOrNull() ?: 3))
 
     private fun processJob(job: PrintJob, overrideBitmap: Bitmap? = null, source: String = "Local") {
@@ -696,7 +706,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun generateStyledBuilder(job: PrintJob, source: String = "Local"): SpannableStringBuilder {
         val type = job.type ?: "plain"
-        if (type == "alert") return generateBanuSugeAlertBuilder(job.content ?: "6666", job.timestamp, source)
+        if (type == "alert") return generateBanuSugeAlertBuilder(job.content ?: "6666", job.timestamp, source, job.boldContent ?: true)
         val builder = SpannableStringBuilder()
         val title = job.title ?: ""; val content = job.content ?: job.text ?: job.message ?: ""
         val titleSize = job.titleSize ?: 32; val contentSize = job.contentSize ?: 26
@@ -711,7 +721,7 @@ class MainActivity : AppCompatActivity() {
             val start = builder.length; builder.append(title).append("\n")
             builder.setSpan(AbsoluteSizeSpan(titleSize), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
             if (job.centerTitle == true || type == "centered") builder.setSpan(AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-            if (type == "header_body") builder.setSpan(StyleSpan(Typeface.BOLD), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+            if (type == "header_body" || job.boldTitle == true) builder.setSpan(StyleSpan(Typeface.BOLD), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         if (content.isNotEmpty()) {
             val start = builder.length
@@ -720,18 +730,20 @@ class MainActivity : AppCompatActivity() {
                     val lineStart = builder.length; builder.append("• ").append(line).append("\n")
                     builder.setSpan(AbsoluteSizeSpan(contentSize), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                     builder.setSpan(AlignmentSpan.Standard(alignment), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    if (job.boldContent == true) builder.setSpan(StyleSpan(Typeface.BOLD), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
             } else {
                 builder.append(content)
                 builder.setSpan(AbsoluteSizeSpan(contentSize), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                 builder.setSpan(AlignmentSpan.Standard(alignment), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-                
+
                 // Force Monospace for ESC/POS or table-like content
                 if (content.contains("  ") || type == "plain") {
                     builder.setSpan(TypefaceSpan("monospace"), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
 
                 if (type == "banner") { builder.setSpan(StyleSpan(Typeface.BOLD), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE); builder.setSpan(AbsoluteSizeSpan(80), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE) }
+                else if (job.boldContent == true) builder.setSpan(StyleSpan(Typeface.BOLD), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
         }
         return builder
@@ -751,7 +763,7 @@ class MainActivity : AppCompatActivity() {
         else -> source
     }
 
-    private fun generateBanuSugeAlertBuilder(content: String, sentTime: String? = null, source: String = "Local"): SpannableStringBuilder {
+    private fun generateBanuSugeAlertBuilder(content: String, sentTime: String? = null, source: String = "Local", boldContent: Boolean = true): SpannableStringBuilder {
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         val now = sdf.format(Date()); val sent = sentTime ?: now; val builder = SpannableStringBuilder(); val center = AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER)
         fun appendCentered(text: String, size: Int, bold: Boolean = false) {
@@ -761,7 +773,7 @@ class MainActivity : AppCompatActivity() {
             builder.setSpan(center, start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         appendCentered("ALERT\n", 60, true); appendCentered("WARNING\n", 32); appendCentered("\n", 20)
-        appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20); appendCentered("\n", 5); appendCentered("${content.trim()}\n", 50, true); appendCentered("\n", 5); appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20)
+        appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20); appendCentered("\n", 5); appendCentered("${content.trim()}\n", 50, boldContent); appendCentered("\n", 5); appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20)
         appendCentered("\n", 15); appendCentered("* * * * * * *\n", 20); appendCentered("\n", 5); appendCentered("${alertSourceLabel(source)}\n", 26); appendCentered("sent: $sent\nrecv: $now\n", 22); appendCentered("\n", 5); appendCentered("* * * * * * *\n", 20)
         appendCentered("\n", 15); appendCentered("Thank you for using B.A.N.U.S.U.G.E\n", 26); appendCentered("(Background Alert Notification Utility for Security Updates & General Events)\n", 14)
         return builder

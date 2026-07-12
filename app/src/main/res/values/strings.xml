@@ -9,6 +9,7 @@
     <string name="label_text_size">Content Size (px): </string>
     <string name="label_title_size">Title Size (px): </string>
     <string name="label_center_title">Center Title</string>
+    <string name="label_bold">Bold</string>
     <string name="label_emoji_outline">Thick Emoji Outline</string>
     <string name="label_alignment">Content Alignment: </string>
     <string name="label_print_mode">Print Mode: </string>

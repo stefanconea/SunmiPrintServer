@@ -153,6 +153,12 @@
                     android:layout_height="wrap_content"
                     android:text="@string/label_center_title"
                     android:checked="true" />
+
+                <CheckBox
+                    android:id="@+id/boldTitleCheckBox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/label_bold" />
             </LinearLayout>
 
             <EditText
@@ -179,11 +185,18 @@
 
                 <EditText
                     android:id="@+id/textSizeField"
-                    android:layout_width="match_parent"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_weight="1"
                     android:inputType="number"
                     android:text="@string/default_text_size"
                     android:textSize="14sp" />
+
+                <CheckBox
+                    android:id="@+id/boldContentCheckBox"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/label_bold" />
             </LinearLayout>
 
             <TextView

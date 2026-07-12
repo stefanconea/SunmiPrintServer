@@ -64,6 +64,11 @@ class SunmiServerGUI:
         self.center_title_cb = tk.Checkbutton(self.left_panel, text="Center Title", variable=self.center_title_var, command=self.on_change)
         self.center_title_cb.pack(anchor="w")
 
+        # Bold Title Checkbox
+        self.bold_title_var = tk.BooleanVar(value=False)
+        self.bold_title_cb = tk.Checkbutton(self.left_panel, text="Bold Title", variable=self.bold_title_var, command=self.on_change)
+        self.bold_title_cb.pack(anchor="w")
+
         # Content Input
         self.content_label = tk.Label(self.left_panel, text="Content / Data:")
         self.content_label.pack(anchor="w", pady=(10, 0))
@@ -78,6 +83,11 @@ class SunmiServerGUI:
         self.content_size_entry.pack(pady=5, anchor="w")
         self.content_size_entry.insert(0, "28")
         self.content_size_entry.bind("<KeyRelease>", self.on_change)
+
+        # Bold Content Checkbox
+        self.bold_content_var = tk.BooleanVar(value=False)
+        self.bold_content_cb = tk.Checkbutton(self.left_panel, text="Bold Content", variable=self.bold_content_var, command=self.on_change)
+        self.bold_content_cb.pack(anchor="w")
 
         # Lines After
         tk.Label(self.left_panel, text="Lines After Print:").pack(anchor="w")
@@ -130,6 +140,8 @@ class SunmiServerGUI:
         title = self.title_entry.get()
         content = self.content_text.get("1.0", tk.END).strip()
         center_title = self.center_title_var.get()
+        bold_title = self.bold_title_var.get()
+        bold_content = self.bold_content_var.get()
         alignment = self.alignment_var.get()
 
         my_id = self.preview_counter + 1
@@ -160,10 +172,11 @@ class SunmiServerGUI:
         else:
             tags = ["center"] if (center_title or fmt == "Centered") else []
             if title:
-                self.preview_text.insert(tk.END, title + "\n", tuple(tags + (["bold"] if fmt == "Header + Body" else [])))
+                self.preview_text.insert(tk.END, title + "\n", tuple(tags + (["bold"] if (fmt == "Header + Body" or bold_title) else [])))
 
             content_tags = ["center"] if (alignment == 1 or fmt == "Centered") else []
             if fmt == "Banner": content_tags.append("banner")
+            elif bold_content: content_tags.append("bold")
 
             if content:
                 if fmt == "List":
@@ -308,6 +321,8 @@ class SunmiServerGUI:
                 "titleSize": int(self.title_size_entry.get() or 40),
                 "contentSize": int(self.content_size_entry.get() or 28),
                 "centerTitle": self.center_title_var.get(),
+                "boldTitle": self.bold_title_var.get(),
+                "boldContent": self.bold_content_var.get(),
                 "alignment": self.alignment_var.get()
             }
             message = json.dumps(job) + "\n"
