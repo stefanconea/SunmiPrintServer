@@ -1,0 +1,56 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.example.sunmiprinttest'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.example.sunmiprinttest"
+        // Sunmi V2 Pro ships with Android 7.1 / 8.1 depending on batch.
+        minSdk 23
+        targetSdk 33
+        versionCode 1
+        versionName "1.0"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'com.google.android.material:material:1.11.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+
+    // Official Sunmi inner-printer SDK (wraps the woyou.aidlservice.jiuiv5 AIDL service).
+    // If this coordinate ever fails to resolve, download "printerlibrary-x.x.x.aar" from
+    // http://developer.sunmi.com (Sunmi Open Platform -> Docs -> Printer Demo & SDK)
+    // and drop it in app/libs/, then swap this line for:
+    //   implementation files('libs/printerlibrary-1.0.18.aar')
+    implementation 'com.sunmi:printerlibrary:1.0.18'
+
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation 'com.google.code.gson:gson:2.10.1'
+    
+    // MQTT Client
+    implementation 'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5'
+    
+    // Lightweight HTTP Server
+    implementation 'org.nanohttpd:nanohttpd:2.3.1'
+}

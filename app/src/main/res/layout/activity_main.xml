@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="16dp">
+
+            <EditText
+                android:id="@+id/serverUrlField"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="192.168.1.241:8080"
+                android:inputType="textUri"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/btnConnect"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Connect" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/label_lines_after"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/linesAfterField"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:text="@string/default_lines_after"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <!-- New: HTTP Server Info -->
+        <TextView
+            android:id="@+id/httpServerInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="HTTP Server: http://0.0.0.0:8081/print"
+            android:textColor="#388E3C"
+            android:textStyle="bold"
+            android:layout_marginBottom="8dp"
+            android:textSize="14sp" />
+
+        <!-- New: MQTT Settings -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:background="#F0F0F0"
+            android:padding="8dp"
+            android:layout_marginBottom="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="MQTT Integration"
+                android:textStyle="bold"
+                android:textSize="12sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <EditText
+                    android:id="@+id/mqttBrokerField"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="tcp://broker.emqx.io:1883"
+                    android:textSize="12sp" />
+
+                <EditText
+                    android:id="@+id/mqttTopicField"
+                    android:layout_width="100dp"
+                    android:layout_height="wrap_content"
+                    android:text="sunmi/print"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnMqttConnect"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="M-Conn"
+                    android:textSize="10sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/status_connecting"
+            android:textSize="16sp"
+            android:layout_marginBottom="16dp" />
+
+        <EditText
+            android:id="@+id/titleField"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/hint_enter_title"
+            android:layout_marginBottom="4dp"
+            android:inputType="text" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/label_title_size"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/titleSizeField"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:inputType="number"
+                android:text="@string/default_title_size"
+                android:textSize="14sp" />
+
+            <CheckBox
+                android:id="@+id/centerTitleCheckBox"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/label_center_title"
+                android:checked="true" />
+        </LinearLayout>
+
+        <EditText
+            android:id="@+id/inputField"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="@string/hint_enter_text"
+            android:layout_marginBottom="4dp"
+            android:inputType="textMultiLine"
+            android:minLines="1" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="12dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/label_text_size"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/textSizeField"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="number"
+                android:text="@string/default_text_size"
+                android:textSize="14sp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/label_print_mode"
+                android:textSize="16sp" />
+
+            <Spinner
+                android:id="@+id/printModeSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:entries="@array/print_modes" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/label_alignment"
+                android:textSize="16sp" />
+
+            <Spinner
+                android:id="@+id/alignmentSpinner"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:entries="@array/alignment_options" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/label_preview"
+            android:textStyle="bold"
+            android:layout_marginBottom="4dp" />
+
+        <FrameLayout
+            android:layout_width="wrap_content"
+            android:layout_height="250dp"
+            android:background="#999999"
+            android:padding="2dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="16dp">
+
+            <!-- Fixed width of 384px to match Sunmi Printer exactly -->
+            <TextView
+                android:id="@+id/livePreview"
+                android:layout_width="384px"
+                android:layout_height="match_parent"
+                android:background="#FFFFFF"
+                android:padding="0dp"
+                android:textColor="#000000"
+                android:scrollbars="vertical" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center">
+
+            <Button
+                android:id="@+id/btnPrint"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_print"
+                android:enabled="false"
+                android:textSize="18sp"
+                android:layout_marginEnd="8dp"
+                android:paddingHorizontal="24dp"
+                android:paddingVertical="16dp" />
+
+            <Button
+                android:id="@+id/btnTestEmoji"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_test_emoji"
+                android:enabled="false"
+                android:textSize="18sp"
+                android:paddingHorizontal="24dp"
+                android:paddingVertical="16dp" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

@@ -1,0 +1,33 @@
+# Android
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/app/build
+/captures
+.externalNativeBuild
+.cxx
+local.properties
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+ENV/
+
+# PyInstaller
+dist/
+dist_old/
+build/
+new_server/
+*.spec
+
+# Other
+SunmiMobiControl.apk
+de bloat backup/

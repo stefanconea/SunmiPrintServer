@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">Sunmi Print Test</string>
+    <string name="btn_print">Print</string>
+    <string name="btn_test_emoji">Test Emoji</string>
+    <string name="hint_enter_title">Enter title</string>
+    <string name="hint_enter_text">Enter text to print</string>
+    <string name="label_text_size">Content Size (px): </string>
+    <string name="label_title_size">Title Size (px): </string>
+    <string name="label_center_title">Center Title</string>
+    <string name="label_emoji_outline">Thick Emoji Outline</string>
+    <string name="label_alignment">Content Alignment: </string>
+    <string name="label_print_mode">Print Mode: </string>
+    <string name="label_lines_after">Lines after: </string>
+    <string name="label_preview">Live Preview:</string>
+    <string name="default_text_size">26</string>
+    <string name="default_title_size">32</string>
+    <string name="default_lines_after">3</string>
+    <string-array name="alignment_options">
+        <item>Normal (Left)</item>
+        <item>Centered</item>
+    </string-array>
+    <string-array name="print_modes">
+        <item>Normal</item>
+        <item>B.A.N.U.S.U.G.E Alert</item>
+    </string-array>
+    <string name="status_connecting">Connecting to printer…</string>
+    <string name="status_connected">Printer connected</string>
+    <string name="status_disconnected">Printer disconnected</string>
+    <string name="status_printing">Printing…</string>
+    <string name="status_done">Printed</string>
+    <string name="status_error">Print error: %1$s</string>
+</resources>
