@@ -25,6 +25,7 @@ import android.text.method.ScrollingMovementMethod
 import android.text.style.AbsoluteSizeSpan
 import android.text.style.AlignmentSpan
 import android.text.style.StyleSpan
+import android.text.style.TypefaceSpan
 import android.util.Base64
 import android.view.Gravity
 import android.view.Menu
@@ -59,6 +60,7 @@ import org.eclipse.paho.client.mqttv3.MqttConnectOptions
 import org.eclipse.paho.client.mqttv3.MqttMessage
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import java.io.BufferedReader
+import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.InputStream
 import java.io.InputStreamReader
@@ -71,6 +73,7 @@ import java.text.SimpleDateFormat
 import java.util.Collections
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.Executors
 import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity() {
@@ -106,6 +109,7 @@ class MainActivity : AppCompatActivity() {
     private val previewHandler = Handler(Looper.getMainLooper())
     private var previewRunnable: Runnable? = null
     private var previewCounter = 0
+    private val printExecutor = Executors.newSingleThreadExecutor()
 
     private val printerCallback = object : InnerPrinterCallback() {
         override fun onConnected(service: SunmiPrinterService) {
@@ -426,11 +430,13 @@ class MainActivity : AppCompatActivity() {
 
         private fun handleClient(socket: Socket) {
             thread {
-                val textBuilder = StringBuilder()
+                val byteBuffer = ByteArrayOutputStream()
+                var currentAlign = 0 // 0=Left, 1=Center, 2=Right
                 try {
                     val dis = DataInputStream(socket.getInputStream())
                     val out = socket.getOutputStream()
                     LogManager.addLog("HA Connection opened")
+                    printerService?.printerInit(null)
                     
                     while (socket.isConnected && !socket.isClosed) {
                         val b = dis.readUnsignedByte()
@@ -438,8 +444,16 @@ class MainActivity : AppCompatActivity() {
                             0x10 -> { if (dis.readUnsignedByte() == 0x04) out.write(getStatusResponse(dis.readUnsignedByte())) }
                             0x1B -> {
                                 when (val b2 = dis.readUnsignedByte()) {
-                                    0x40 -> { /* Init */ }
-                                    0x61, 0x21, 0x2D, 0x4A, 0x64, 0x74, 0x45, 0x47, 0x4D, 0x56, 0x7B -> { dis.readUnsignedByte() }
+                                    0x40 -> { currentAlign = 0; printerService?.printerInit(null) }
+                                    0x61 -> { 
+                                        val n = dis.readUnsignedByte()
+                                        currentAlign = when(n) {
+                                            1, 49 -> 1
+                                            2, 50 -> 2
+                                            else -> 0
+                                        }
+                                    }
+                                    0x21, 0x2D, 0x4A, 0x64, 0x74, 0x45, 0x47, 0x4D, 0x56, 0x7B -> { dis.readUnsignedByte() }
                                     0x70 -> { repeat(3) { dis.readUnsignedByte() } }
                                     0x2A -> {
                                         val m = dis.readUnsignedByte(); val nL = dis.readUnsignedByte(); val nH = dis.readUnsignedByte()
@@ -458,15 +472,12 @@ class MainActivity : AppCompatActivity() {
                                             val len = pL + (pH shl 8)
                                             val payload = ByteArray(len)
                                             dis.readFully(payload)
-                                            val cn = payload[0].toInt() and 0xFF
                                             val fn = payload[1].toInt() and 0xFF
                                             if (fn == 80) {
                                                 lastQrContent = String(payload.copyOfRange(3, len)).trim()
-                                                LogManager.addLog("QR Data Cached")
                                             } else if (fn == 81) {
                                                 lastQrContent?.let {
-                                                    LogManager.addLog("Printing HA QR Code")
-                                                    processJob(PrintJob(type = "qr", content = it))
+                                                    processJob(PrintJob(type = "qr", content = it, alignment = currentAlign))
                                                 }
                                             }
                                         }
@@ -479,28 +490,34 @@ class MainActivity : AppCompatActivity() {
                                             val wBytes = xL + (xH shl 8); val hPixels = yL + (yH shl 8)
                                             val data = ByteArray(wBytes * hPixels)
                                             dis.readFully(data)
-                                            renderEscPosImage(wBytes, hPixels, data)
+                                            renderEscPosImage(wBytes, hPixels, data, currentAlign)
                                         }
                                     }
                                 }
                             }
-                            in 32..126, 10, 13 -> {
-                                textBuilder.append(b.toChar())
-                                if (b == 10 || b == 13) flushText(textBuilder)
+                            10, 13 -> {
+                                flushTextBytes(byteBuffer, currentAlign)
+                            }
+                            else -> {
+                                byteBuffer.write(b)
                             }
                         }
                     }
                 } catch (e: Exception) { } finally {
-                    flushText(textBuilder)
-                    try { socket.close() } catch (_: Exception) {}
+                    flushTextBytes(byteBuffer, currentAlign)
+                    try { 
+                        Thread.sleep(500)
+                        printerService?.lineWrap(3, null)
+                        socket.close() 
+                    } catch (_: Exception) {}
                     LogManager.addLog("HA Connection closed")
                 }
             }
         }
 
-        private fun renderEscPosImage(wBytes: Int, hPixels: Int, data: ByteArray) {
-            val width = wBytes * 8
-            val bitmap = createBitmap(width, hPixels, Bitmap.Config.ARGB_8888)
+        private fun renderEscPosImage(wBytes: Int, hPixels: Int, data: ByteArray, align: Int) {
+            val imgWidth = wBytes * 8
+            val bitmap = createBitmap(imgWidth, hPixels, Bitmap.Config.ARGB_8888)
             for (y in 0 until hPixels) {
                 for (xByte in 0 until wBytes) {
                     val b = data[y * wBytes + xByte].toInt() and 0xFF
@@ -510,14 +527,25 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             }
-            LogManager.addLog("Bit-Image Processed (${width}x${hPixels})")
-            renderAndPrintBitmap(bitmap, 3)
+            val finalBitmap = createBitmap(384, hPixels, Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(finalBitmap)
+            canvas.drawColor(Color.WHITE)
+            val xOffset = when(align) {
+                1 -> ((384 - imgWidth) / 2).toFloat()
+                2 -> (384 - imgWidth).toFloat()
+                else -> 0f
+            }
+            canvas.drawBitmap(bitmap, xOffset, 0f, null)
+            processJob(PrintJob(type = "bitmap", alignment = align, content = ""), finalBitmap)
         }
 
-        private fun flushText(sb: StringBuilder) {
-            val line = sb.toString().trim()
-            if (line.isNotEmpty()) processJob(PrintJob(content = line))
-            sb.setLength(0)
+        private fun flushTextBytes(os: ByteArrayOutputStream, align: Int) {
+            val bytes = os.toByteArray()
+            if (bytes.isNotEmpty()) {
+                val line = String(bytes, java.nio.charset.Charset.forName("ISO-8859-1"))
+                processJob(PrintJob(content = line, alignment = align, linesAfter = 0, contentSize = 22))
+            }
+            os.reset()
         }
 
         private fun getStatusResponse(n: Int): Int = when (n) {
@@ -625,8 +653,11 @@ class MainActivity : AppCompatActivity() {
         contentSize = textSizeField.text.toString().toIntOrNull() ?: 26, centerTitle = centerTitleCheckBox.isChecked,
         alignment = alignmentSpinner.selectedItemPosition, linesAfter = prefs.getString("default_lines_after", "3")?.toIntOrNull() ?: 3))
 
-    private fun processJob(job: PrintJob) {
-        thread { val bitmap = renderJobToBitmap(job); renderAndPrintBitmap(bitmap, job.linesAfter ?: 3) }
+    private fun processJob(job: PrintJob, overrideBitmap: Bitmap? = null) {
+        printExecutor.submit {
+            val bitmap = overrideBitmap ?: renderJobToBitmap(job)
+            renderAndPrintBitmap(bitmap, job.linesAfter ?: 0)
+        }
     }
 
     private fun generateStyledBuilder(job: PrintJob): SpannableStringBuilder {
@@ -635,7 +666,13 @@ class MainActivity : AppCompatActivity() {
         val builder = SpannableStringBuilder()
         val title = job.title ?: ""; val content = job.content ?: job.text ?: job.message ?: ""
         val titleSize = job.titleSize ?: 32; val contentSize = job.contentSize ?: 26
-        val alignment = if (job.alignment == 1 || type == "centered") Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
+        
+        val alignment = when {
+            job.alignment == 1 || type == "centered" -> Layout.Alignment.ALIGN_CENTER
+            job.alignment == 2 -> Layout.Alignment.ALIGN_OPPOSITE
+            else -> Layout.Alignment.ALIGN_NORMAL
+        }
+
         if (title.isNotEmpty()) {
             val start = builder.length; builder.append(title).append("\n")
             builder.setSpan(AbsoluteSizeSpan(titleSize), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -648,11 +685,18 @@ class MainActivity : AppCompatActivity() {
                 content.split("\n").forEach { line ->
                     val lineStart = builder.length; builder.append("• ").append(line).append("\n")
                     builder.setSpan(AbsoluteSizeSpan(contentSize), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    builder.setSpan(AlignmentSpan.Standard(alignment), lineStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                 }
             } else {
                 builder.append(content)
                 builder.setSpan(AbsoluteSizeSpan(contentSize), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
                 builder.setSpan(AlignmentSpan.Standard(alignment), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                
+                // Force Monospace for ESC/POS or table-like content
+                if (content.contains("  ") || type == "plain") {
+                    builder.setSpan(TypefaceSpan("monospace"), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+
                 if (type == "banner") { builder.setSpan(StyleSpan(Typeface.BOLD), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE); builder.setSpan(AbsoluteSizeSpan(80), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE) }
             }
         }
@@ -689,8 +733,13 @@ class MainActivity : AppCompatActivity() {
                 val bitMatrix: BitMatrix = MultiFormatWriter().encode(job.content ?: "0", format, if (type == "qr") 250 else 380, if (type == "qr") 250 else 100)
                 val bitmap = createBitmap(bitMatrix.width, bitMatrix.height, Bitmap.Config.ARGB_8888)
                 for (x in 0 until bitMatrix.width) { for (y in 0 until bitMatrix.height) bitmap.setPixel(x, y, if (bitMatrix.get(x, y)) Color.BLACK else Color.WHITE) }
+                val xOffset = when(job.alignment) {
+                    1 -> ((width - bitMatrix.width) / 2).toFloat()
+                    2 -> (width - bitMatrix.width).toFloat()
+                    else -> 0f
+                }
                 val finalBitmap = createBitmap(width, bitMatrix.height + 20, Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(finalBitmap); canvas.drawColor(Color.WHITE); canvas.drawBitmap(bitmap, ((width - bitMatrix.width) / 2).toFloat(), 10f, null)
+                val canvas = Canvas(finalBitmap); canvas.drawColor(Color.WHITE); canvas.drawBitmap(bitmap, xOffset, 10f, null)
                 finalBitmap
             } catch (e: Exception) { renderTextToBitmap(SpannableStringBuilder("$type Error: ${e.message}"), width) }
         }
@@ -707,7 +756,11 @@ class MainActivity : AppCompatActivity() {
     private fun renderTextToBitmap(builder: SpannableStringBuilder, width: Int): Bitmap {
         val textPaint = TextPaint().apply { color = Color.BLACK; isAntiAlias = true }
         val alignmentSpans = builder.getSpans(0, builder.length, AlignmentSpan::class.java)
-        val baseAlignment = if (alignmentSpans.any { it.alignment == Layout.Alignment.ALIGN_CENTER }) Layout.Alignment.ALIGN_CENTER else Layout.Alignment.ALIGN_NORMAL
+        val baseAlignment = when {
+            alignmentSpans.any { it.alignment == Layout.Alignment.ALIGN_CENTER } -> Layout.Alignment.ALIGN_CENTER
+            alignmentSpans.any { it.alignment == Layout.Alignment.ALIGN_OPPOSITE } -> Layout.Alignment.ALIGN_OPPOSITE
+            else -> Layout.Alignment.ALIGN_NORMAL
+        }
         val staticLayout = StaticLayout.Builder.obtain(builder, 0, builder.length, textPaint, width).setAlignment(baseAlignment).build()
         val bitmap = createBitmap(width, staticLayout.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap); canvas.drawColor(Color.WHITE); staticLayout.draw(canvas)
@@ -722,8 +775,11 @@ class MainActivity : AppCompatActivity() {
             override fun onRaiseException(code: Int, msg: String?) { runOnUiThread { statusText.text = getString(R.string.status_error, msg) } }
             override fun onPrintResult(code: Int, msg: String?) {}
         }
-        try { runOnUiThread { statusText.text = getString(R.string.status_printing) }; service.printerInit(null); service.printBitmap(bitmap, resultCallback); service.lineWrap(linesAfter, null) } 
-        catch (e: RemoteException) { runOnUiThread { statusText.text = getString(R.string.status_error, e.message) } }
+        try {
+            runOnUiThread { statusText.text = getString(R.string.status_printing) }
+            service.printBitmap(bitmap, resultCallback)
+            if (linesAfter > 0) service.lineWrap(linesAfter, null)
+        } catch (e: RemoteException) { runOnUiThread { statusText.text = getString(R.string.status_error, e.message) } }
     }
 
     private fun thresholdBitmap(bitmap: Bitmap): Bitmap {
