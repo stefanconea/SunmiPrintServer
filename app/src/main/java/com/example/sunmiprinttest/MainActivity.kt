@@ -749,6 +749,18 @@ class MainActivity : AppCompatActivity() {
         return label + " ".repeat(spaces) + value
     }
 
+    /** How many monospace characters at [sizePx] fit across the printable [canvasWidthPx],
+     *  measured directly rather than guessed -- character width doesn't scale perfectly
+     *  linearly with point size, so a guessed ratio drifts and wraps mid-word. Shaves one
+     *  character off as a rounding safety margin. */
+    private fun monoCharsPerLine(sizePx: Int, canvasWidthPx: Int = 384): Int {
+        val charWidth = TextPaint().apply {
+            typeface = Typeface.MONOSPACE
+            textSize = sizePx.toFloat()
+        }.measureText("0")
+        return (canvasWidthPx / charWidth).toInt() - 1
+    }
+
     private fun formatMoney(value: Double): String =
         String.format(Locale.getDefault(), "%.2f", value).replace('.', ',') + " lei"
 
@@ -764,33 +776,62 @@ class MainActivity : AppCompatActivity() {
         val sdf = SimpleDateFormat("dd-MM-yyyy hh:mm a", Locale.getDefault())
         val now = sdf.format(Date())
 
-        val builder = SpannableStringBuilder()
-        val ruleWidth = 26
+        val bodySize = 22
+        val itemSize = 24
+        val totalSize = 30
+        val ruleWidth = monoCharsPerLine(bodySize)
+        val itemWidth = monoCharsPerLine(itemSize)
+        val totalWidth = monoCharsPerLine(totalSize)
         val rule = "-".repeat(ruleWidth)
+
+        val builder = SpannableStringBuilder()
+        // renderTextToBitmap picks a single base alignment for the whole layout whenever any
+        // ALIGN_OPPOSITE span exists anywhere in it (see the item/total/cash rows below), so
+        // every paragraph needs its own explicit span to avoid being swept into that base --
+        // and each needs its OWN span object: reusing one AlignmentSpan instance across
+        // multiple setSpan() calls moves its attachment rather than adding a new one, so only
+        // the last range would actually keep it.
+        fun alignNormal() = AlignmentSpan.Standard(Layout.Alignment.ALIGN_NORMAL)
+        fun alignOpposite() = AlignmentSpan.Standard(Layout.Alignment.ALIGN_OPPOSITE)
 
         val headerStart = builder.length
         builder.append(companyName).append("\n")
-        builder.setSpan(AbsoluteSizeSpan(26), headerStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        builder.setSpan(StyleSpan(Typeface.BOLD), headerStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val headerEnd = builder.length
+        builder.setSpan(AbsoluteSizeSpan(26), headerStart, headerEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(StyleSpan(Typeface.BOLD), headerStart, headerEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(alignNormal(), headerStart, headerEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
 
         val bodyStart = builder.length
         builder.append("Employee: Owner\n")
         builder.append("POS: POS 1\n")
         builder.append(rule).append("\n")
-        builder.append(padRow("Intrare interzisa", formatMoney(unitPrice), ruleWidth)).append("\n")
+        val itemStart = builder.length
+        val itemPriceRowStart = builder.length
+        builder.append(padRow("Intrare interzisa", formatMoney(unitPrice), itemWidth)).append("\n")
+        val itemPriceRowEnd = builder.length
         builder.append("$quantity x ${formatMoney(unitPrice)}\n")
+        val itemEnd = builder.length
         builder.append(rule).append("\n")
         val totalStart = builder.length
-        builder.append(padRow("Total", formatMoney(total), ruleWidth)).append("\n")
+        builder.append(padRow("Total", formatMoney(total), totalWidth)).append("\n")
         val totalEnd = builder.length
+        val cashStart = builder.length
         builder.append(padRow("Cash", formatMoney(total), ruleWidth)).append("\n")
+        val cashEnd = builder.length
         builder.append(rule).append("\n")
         builder.append(now).append("\n")
         builder.append("#1-%04d".format(counter)).append("\n")
-        builder.setSpan(AbsoluteSizeSpan(22), bodyStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        builder.setSpan(TypefaceSpan("monospace"), bodyStart, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
-        builder.setSpan(AbsoluteSizeSpan(30), totalStart, totalEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        val bodyEnd = builder.length
+
+        builder.setSpan(AbsoluteSizeSpan(bodySize), bodyStart, bodyEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(TypefaceSpan("monospace"), bodyStart, bodyEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(alignNormal(), bodyStart, bodyEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(AbsoluteSizeSpan(itemSize), itemStart, itemEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(alignOpposite(), itemPriceRowStart, itemPriceRowEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(AbsoluteSizeSpan(totalSize), totalStart, totalEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         builder.setSpan(StyleSpan(Typeface.BOLD), totalStart, totalEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(alignOpposite(), totalStart, totalEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
+        builder.setSpan(alignOpposite(), cashStart, cashEnd, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
 
         return builder
     }
