@@ -42,85 +42,67 @@ _LOGGER = logging.getLogger(__name__)
 
 _ALIGNMENT_VALIDATOR = vol.In(ALIGNMENT_OPTIONS)
 
-PRINT_TEXT_SCHEMA = vol.Schema(
-    {
-        vol.Optional("format", default=DEFAULT_TYPE): vol.In(PRINT_TEXT_TYPE_OPTIONS),
-        vol.Optional("title"): cv.string,
-        vol.Required("content"): cv.string,
-        vol.Optional("title_size", default=DEFAULT_TITLE_SIZE): cv.positive_int,
-        vol.Optional("content_size", default=DEFAULT_CONTENT_SIZE): cv.positive_int,
-        vol.Optional("center_title", default=False): cv.boolean,
-        vol.Optional("alignment", default="left"): _ALIGNMENT_VALIDATOR,
-        vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
-    }
-)
+PRINT_TEXT_SCHEMA = {
+    vol.Optional("format", default=DEFAULT_TYPE): vol.In(PRINT_TEXT_TYPE_OPTIONS),
+    vol.Optional("title"): cv.string,
+    vol.Required("content"): cv.string,
+    vol.Optional("title_size", default=DEFAULT_TITLE_SIZE): cv.positive_int,
+    vol.Optional("content_size", default=DEFAULT_CONTENT_SIZE): cv.positive_int,
+    vol.Optional("center_title", default=False): cv.boolean,
+    vol.Optional("alignment", default="left"): _ALIGNMENT_VALIDATOR,
+    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+}
 
-PRINT_BOXED_SCHEMA = vol.Schema(
-    {
-        vol.Optional("title"): cv.string,
-        vol.Required("content"): cv.string,
-        vol.Optional("title_size", default=DEFAULT_TITLE_SIZE): cv.positive_int,
-        vol.Optional("content_size", default=DEFAULT_CONTENT_SIZE): cv.positive_int,
-        vol.Optional("center_title", default=False): cv.boolean,
-        vol.Optional("alignment", default="left"): _ALIGNMENT_VALIDATOR,
-        vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
-    }
-)
+PRINT_BOXED_SCHEMA = {
+    vol.Optional("title"): cv.string,
+    vol.Required("content"): cv.string,
+    vol.Optional("title_size", default=DEFAULT_TITLE_SIZE): cv.positive_int,
+    vol.Optional("content_size", default=DEFAULT_CONTENT_SIZE): cv.positive_int,
+    vol.Optional("center_title", default=False): cv.boolean,
+    vol.Optional("alignment", default="left"): _ALIGNMENT_VALIDATOR,
+    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+}
 
-PRINT_BANNER_SCHEMA = vol.Schema(
-    {
-        vol.Required("content"): cv.string,
-        vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
-    }
-)
+PRINT_BANNER_SCHEMA = {
+    vol.Required("content"): cv.string,
+    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+}
 
-PRINT_LIST_SCHEMA = vol.Schema(
-    {
-        vol.Optional("title"): cv.string,
-        vol.Required("content"): cv.string,
-        vol.Optional("content_size", default=DEFAULT_CONTENT_SIZE): cv.positive_int,
-        vol.Optional("alignment", default="left"): _ALIGNMENT_VALIDATOR,
-        vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
-    }
-)
+PRINT_LIST_SCHEMA = {
+    vol.Optional("title"): cv.string,
+    vol.Required("content"): cv.string,
+    vol.Optional("content_size", default=DEFAULT_CONTENT_SIZE): cv.positive_int,
+    vol.Optional("alignment", default="left"): _ALIGNMENT_VALIDATOR,
+    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+}
 
-PRINT_ALERT_SCHEMA = vol.Schema(
-    {
-        vol.Required("content"): cv.string,
-        vol.Optional("timestamp"): cv.string,
-    }
-)
+PRINT_ALERT_SCHEMA = {
+    vol.Required("content"): cv.string,
+    vol.Optional("timestamp"): cv.string,
+}
 
-PRINT_QR_SCHEMA = vol.Schema(
-    {
-        vol.Required("content"): cv.string,
-        vol.Optional("alignment", default="center"): _ALIGNMENT_VALIDATOR,
-        vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
-    }
-)
+PRINT_QR_SCHEMA = {
+    vol.Required("content"): cv.string,
+    vol.Optional("alignment", default="center"): _ALIGNMENT_VALIDATOR,
+    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+}
 
-PRINT_BARCODE_SCHEMA = vol.Schema(
-    {
-        vol.Required("content"): cv.string,
-        vol.Optional("alignment", default="center"): _ALIGNMENT_VALIDATOR,
-        vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
-    }
-)
+PRINT_BARCODE_SCHEMA = {
+    vol.Required("content"): cv.string,
+    vol.Optional("alignment", default="center"): _ALIGNMENT_VALIDATOR,
+    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+}
 
-PRINT_IMAGE_SCHEMA = vol.Schema(
-    {
-        vol.Optional("url"): cv.string,
-        vol.Optional("image_entity"): cv.entity_id,
-        vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
-    }
-)
+PRINT_IMAGE_SCHEMA = {
+    vol.Optional("url"): cv.string,
+    vol.Optional("image_entity"): cv.entity_id,
+    vol.Optional("lines_after", default=DEFAULT_LINES_AFTER): cv.positive_int,
+}
 
-PRINT_RAW_SCHEMA = vol.Schema(
-    {
-        vol.Required("type"): cv.string,
-        vol.Optional("data", default=dict): dict,
-    }
-)
+PRINT_RAW_SCHEMA = {
+    vol.Required("type"): cv.string,
+    vol.Optional("data", default=dict): dict,
+}
 
 
 async def async_setup_entry(
