@@ -74,9 +74,19 @@ import java.util.Collections
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity() {
+
+    companion object {
+        // Heuristics used to approximate how long a physical print takes, since the SDK
+        // has no true print-completion callback (see renderAndPrintBitmap).
+        private const val MS_PER_PIXEL_ROW = 2
+        private const val MIN_WATCH_MS = 1500
+        private const val WATCH_STEP_MS = 200
+    }
 
     private var printerService: SunmiPrinterService? = null
     private var tcpSocket: Socket? = null
@@ -781,23 +791,21 @@ class MainActivity : AppCompatActivity() {
             JobLogManager.completeJob(jobId, false, "printer not connected")
             return
         }
+        val sdkFailed = AtomicBoolean(false)
+        val sdkFailReason = AtomicReference<String?>(null)
         val resultCallback = object : InnerResultCallback() {
+            // isSuccess only means "the print command was accepted" -- it fires almost
+            // immediately and does not wait for the physical print to finish, so it can't
+            // by itself catch a fault (e.g. door opened) introduced mid-print. Record an
+            // explicit SDK-level failure here; the actual pass/fail verdict is decided below
+            // after watching live hardware state for a window sized to the content. This
+            // callback may fire on a different thread than the watch loop, hence the atomics.
             override fun onRunResult(isSuccess: Boolean) {
-                // The SDK's isSuccess only means "the print command was accepted" -- it does not
-                // guarantee the paper physically came out cleanly (e.g. the door was opened
-                // mid-print). Cross-check live hardware state so that case is still caught.
-                val hwFault = try {
-                    service.updatePrinterState().takeIf { it != 1 }?.let { printerStatusLabel(it) }
-                } catch (_: RemoteException) { null }
-                val success = isSuccess && hwFault == null
-                val reason = hwFault ?: "printer failure"
-                JobLogManager.completeJob(jobId, success, if (success) null else reason)
-                runOnUiThread { statusText.text = if (success) getString(R.string.status_done) else getString(R.string.status_error, reason) }
+                if (!isSuccess) { sdkFailed.set(true); sdkFailReason.set("printer failure") }
             }
             override fun onReturnString(result: String?) {}
             override fun onRaiseException(code: Int, msg: String?) {
-                JobLogManager.completeJob(jobId, false, msg)
-                runOnUiThread { statusText.text = getString(R.string.status_error, msg) }
+                sdkFailed.set(true); sdkFailReason.set(msg)
             }
             override fun onPrintResult(code: Int, msg: String?) {}
         }
@@ -808,7 +816,29 @@ class MainActivity : AppCompatActivity() {
         } catch (e: RemoteException) {
             JobLogManager.completeJob(jobId, false, e.message)
             runOnUiThread { statusText.text = getString(R.string.status_error, e.message) }
+            return
         }
+
+        // There is no true print-completion callback from the SDK, so approximate one:
+        // poll hardware state for a window sized to the bitmap's height (taller content
+        // takes longer to physically feed through) and flag a failure if a fault (door
+        // open, no paper, etc.) shows up at any point during that window.
+        val watchMs = (bitmap.height * MS_PER_PIXEL_ROW).coerceAtLeast(MIN_WATCH_MS)
+        var hwFault: String? = null
+        var elapsed = 0
+        while (elapsed < watchMs) {
+            Thread.sleep(WATCH_STEP_MS.toLong())
+            elapsed += WATCH_STEP_MS
+            try {
+                val status = service.updatePrinterState()
+                if (status != 1) hwFault = printerStatusLabel(status)
+            } catch (_: RemoteException) {}
+        }
+
+        val success = !sdkFailed.get() && hwFault == null
+        val reason = hwFault ?: sdkFailReason.get() ?: "printer failure"
+        JobLogManager.completeJob(jobId, success, if (success) null else reason)
+        runOnUiThread { statusText.text = if (success) getString(R.string.status_done) else getString(R.string.status_error, reason) }
     }
 
     private fun thresholdBitmap(bitmap: Bitmap): Bitmap {
