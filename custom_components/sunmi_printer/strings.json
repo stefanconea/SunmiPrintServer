@@ -1,0 +1,48 @@
+{
+  "title": "Sunmi Printer",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to your Sunmi Printer",
+        "description": "Enter the IP address of the Sunmi V2 Pro running the printer app. The app's HTTP server listens on port 8081 by default.",
+        "data": {
+          "host": "Host (IP address)",
+          "port": "Port",
+          "name": "Name"
+        }
+      },
+      "reconfigure": {
+        "title": "Update Sunmi Printer connection",
+        "description": "Update the device's IP address or port, for example after it changed on your network.",
+        "data": {
+          "host": "Host (IP address)",
+          "port": "Port",
+          "name": "Name"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the printer app at that address. Check the IP, port, and that the app is running.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This printer is already configured.",
+      "reconfigure_successful": "The printer connection was updated.",
+      "wrong_device": "This is a different device than the one being reconfigured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Sunmi Printer defaults",
+        "description": "Defaults used when printing a plain notification (for example via notify.send_message). The dedicated print_* services always let you override these per call.",
+        "data": {
+          "default_type": "Default layout",
+          "default_lines_after": "Default lines fed after printing",
+          "default_title_size": "Default title size (px)",
+          "default_content_size": "Default content size (px)"
+        }
+      }
+    }
+  }
+}

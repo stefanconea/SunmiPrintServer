@@ -1,31 +1,23 @@
 # Sunmi Print Test
 
-A feature-rich test application for the Sunmi V2 Pro built-in thermal printer. This app allows for local printing with advanced styling, live pixel-perfect previews, and remote printing via multiple protocols.
+A feature-rich utility for the Sunmi V2 Pro built-in thermal printer. This app allows for pixel-perfect bitmap rendering and robust remote printing via multiple protocols.
 
 ## Features
 
-- **Bitmap Rendering**: Renders all text to a 384px bitmap before printing, ensuring the output matches the preview exactly.
-- **Enhanced Emoji Support**: Includes custom edge-detection logic to create sharp, bold outlines for emojis, making them highly legible on thermal paper.
-- **B.A.N.U.S.U.G.E Alert Mode**: A specialized high-importance alert layout (Background Alert Notification Utility for Security Updates & General Events).
+- **Bitmap Rendering Engine**: Renders all content to a 384px bitmap before printing, ensuring output matches the preview exactly.
+- **Enhanced ESC/POS Support**: Robust binary parsing with state-aware alignment, CP437 character set for clean table borders, and fixed 12px hardware grid locking for perfect column alignment.
+- **B.A.N.U.S.U.G.E Alert Mode**: Specialized high-importance alert layout (Background Alert Notification Utility for Security Updates & General Events).
 - **Multiple Remote Protocols**: 
-  - **TCP Socket Server**: Connect to a desktop GUI for manual jobs.
-  - **HTTP/Web Server**: Host a local web page on the device for mobile/browser printing.
-  - **MQTT Client**: Connect to any broker (Home Assistant, etc.) to receive automated print jobs.
+  - **HTTP API**: Specialized endpoints for JSON, raw images, and URL pulling.
+  - **MQTT Client**: Connect to Home Assistant or any broker to receive automated print jobs.
+  - **TCP Socket Server**: Connect to a desktop GUI for manual jobs or raw ESC/POS streaming on port 9100.
 - **Live Preview**: A fixed-width 384px preview box that accurately shows text wrapping and font sizes as they will appear on the receipt.
-- **Styling Options**: 
-  - Independent Title and Content text sizes (in pixels).
-  - Configurable Title centering.
-  - Content alignment (Left or Center).
-  - Configurable paper feed ("Lines after") setting.
 
 ## How it works
 
-- **Printer Binding**: Connects to the `woyou.aidlservice.jiuiv5` system service using the Sunmi `printerlibrary`.
-- **Image-Based Printing**: Instead of sending raw characters, the app builds a `SpannableStringBuilder`, renders it onto an Android `Canvas` at a fixed width of 384px, and applies a custom thresholding algorithm to ensure a crisp black-and-white output.
-- **Integrations**:
-  - **HTTP**: Listens on port `8081`. Access `http://<ip>:8081` in any browser to print.
-  - **MQTT**: Subscribes to a configurable topic for JSON or raw text jobs.
-  - **TCP**: Maintains a persistent connection to the Python desktop server.
+- **Printer Binding**: Connects to the `woyou.aidlservice.jiuiv5` system service.
+- **Print Queue**: Uses a single-threaded executor to process jobs sequentially, preventing race conditions or dropped rows in long receipts.
+- **Image-Based Printing**: Bypasses traditional proportional font issues by rendering text to a bitmap using a fixed horizontal grid.
 
 ## Getting Started
 
@@ -36,33 +28,43 @@ A feature-rich test application for the Sunmi V2 Pro built-in thermal printer. T
 4. Press **Run**. The app will automatically bind to the printer service and start the internal servers.
 
 ### 2. Remote Printing (Home Assistant / CURL)
-Send a POST request to `http://<device-ip>:8081/print`:
-```json
-{
-  "type": "alert",
-  "content": "6666"
-}
+
+#### Print an Image (Recommended for Tables/Receipts)
+Send a raw PNG/JPG to `http://<device-ip>:8081/image`:
+```bash
+curl -X POST -H "Content-Type: image/png" --data-binary "@receipt.png" http://<device-ip>:8081/image
 ```
-Or for a normal message:
+
+#### Pull from URL
+Tell the printer to fetch and print an image:
+`http://<device-ip>:8081/print_url?url=http://ha-ip:8123/local/receipt.png`
+
+#### Print Styled JSON
+POST a request to `http://<device-ip>:8081/print`:
 ```json
 {
   "title": "HA Notification",
   "content": "Front door opened",
-  "linesAfter": 3
+  "linesAfter": 3,
+  "contentSize": 22
 }
 ```
+
+#### Home Assistant Integration (Recommended)
+For a more reliable integration than the raw ESC/POS socket, install the custom
+`custom_components/sunmi_printer/` integration via HACS (or manually) — it talks to the
+JSON `/print` endpoint above and gives you a notify entity plus dedicated services
+(`sunmi_printer.print_text`, `print_qr`, `print_image`, etc.) with a proper config flow.
+See [`custom_components/sunmi_printer/README.md`](custom_components/sunmi_printer/README.md).
 
 ### 3. Desktop GUI Server
 1. Run the server: `python server.py`
 2. Enter the IP shown in the GUI into the Android app and tap **Connect**.
-3. Use **Normal** mode for custom text or **B.A.N.U.S.U.G.E** for stylized alerts.
-
-## Building the Server EXE
-If you want to use the server without Python installed:
-1. `python -m PyInstaller --onefile --noconsole server.py`
-2. Find `server.exe` in the `dist/` folder.
 
 ## Technical Notes
 
-- **Resolution**: 384 pixels is the native width for Sunmi V2 Pro.
-- **B.A.N.U.S.U.G.E**: Part of the Background Alert Notification Utility for Security Updates & General Events system.
+- **Native Width**: 384 pixels.
+- **Character Spacing**: Fixed 12px grid (fits 32 characters per line).
+- **ESC/POS Port**: `9100` for standard raw socket printing.
+- **HTTP Port**: `8081`.
+- **Encoding**: Uses `ISO-8859-1` / `Cp437` for hardware symbol compatibility.

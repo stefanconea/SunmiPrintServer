@@ -1,0 +1,313 @@
+print_text:
+  name: Print text
+  description: >
+    Print plain, centered, or header+body text. For boxed/banner/list/alert
+    layouts use their dedicated services instead.
+  target: &notify_target
+    entity:
+      - integration: sunmi_printer
+        domain: notify
+  fields:
+    format:
+      name: Format
+      selector:
+        select:
+          options:
+            - plain
+            - centered
+            - header_body
+      default: plain
+    title:
+      name: Title
+      selector:
+        text:
+    content:
+      name: Content
+      required: true
+      selector:
+        text:
+          multiline: true
+    title_size:
+      name: Title size
+      selector:
+        number:
+          min: 8
+          max: 120
+          unit_of_measurement: px
+      default: 32
+    content_size:
+      name: Content size
+      selector:
+        number:
+          min: 8
+          max: 120
+          unit_of_measurement: px
+      default: 26
+    center_title:
+      name: Center title
+      selector:
+        boolean:
+      default: false
+    alignment:
+      name: Alignment
+      selector:
+        select:
+          options:
+            - left
+            - center
+            - right
+      default: left
+    lines_after:
+      name: Lines after
+      selector:
+        number:
+          min: 0
+          max: 20
+      default: 3
+
+print_boxed:
+  name: Print boxed
+  description: Print text inside a bordered box.
+  target: *notify_target
+  fields:
+    title:
+      name: Title
+      selector:
+        text:
+    content:
+      name: Content
+      required: true
+      selector:
+        text:
+          multiline: true
+    title_size:
+      name: Title size
+      selector:
+        number:
+          min: 8
+          max: 120
+          unit_of_measurement: px
+      default: 32
+    content_size:
+      name: Content size
+      selector:
+        number:
+          min: 8
+          max: 120
+          unit_of_measurement: px
+      default: 26
+    center_title:
+      name: Center title
+      selector:
+        boolean:
+      default: false
+    alignment:
+      name: Alignment
+      selector:
+        select:
+          options:
+            - left
+            - center
+            - right
+      default: left
+    lines_after:
+      name: Lines after
+      selector:
+        number:
+          min: 0
+          max: 20
+      default: 3
+
+print_banner:
+  name: Print banner
+  description: >
+    Print large bold banner text. The device hardcodes the banner size; there
+    is no content-size control for this layout.
+  target: *notify_target
+  fields:
+    content:
+      name: Content
+      required: true
+      selector:
+        text:
+    lines_after:
+      name: Lines after
+      selector:
+        number:
+          min: 0
+          max: 20
+      default: 3
+
+print_list:
+  name: Print list
+  description: Print a bulleted list, one item per line of content.
+  target: *notify_target
+  fields:
+    title:
+      name: Title
+      selector:
+        text:
+    content:
+      name: Content
+      required: true
+      description: One bullet item per line.
+      selector:
+        text:
+          multiline: true
+    content_size:
+      name: Content size
+      selector:
+        number:
+          min: 8
+          max: 120
+          unit_of_measurement: px
+      default: 26
+    alignment:
+      name: Alignment
+      selector:
+        select:
+          options:
+            - left
+            - center
+            - right
+      default: left
+    lines_after:
+      name: Lines after
+      selector:
+        number:
+          min: 0
+          max: 20
+      default: 3
+
+print_alert:
+  name: Print alert
+  description: >
+    Print the large, centered B.A.N.U.S.U.G.E security-alert receipt layout.
+  target: *notify_target
+  fields:
+    content:
+      name: Alert message
+      required: true
+      selector:
+        text:
+          multiline: true
+    timestamp:
+      name: Sent timestamp
+      description: >
+        Optional "sent" timestamp, format "yyyy-MM-dd HH:mm:ss". Defaults to
+        the device's current time if omitted.
+      selector:
+        text:
+
+print_qr:
+  name: Print QR code
+  description: Print a QR code encoding the given data.
+  target: *notify_target
+  fields:
+    content:
+      name: Data
+      required: true
+      selector:
+        text:
+    alignment:
+      name: Alignment
+      selector:
+        select:
+          options:
+            - left
+            - center
+            - right
+      default: center
+    lines_after:
+      name: Lines after
+      selector:
+        number:
+          min: 0
+          max: 20
+      default: 3
+
+print_barcode:
+  name: Print barcode
+  description: >
+    Print a CODE_128 barcode encoding the given data. Symbology is hardcoded
+    on the device and is not selectable.
+  target: *notify_target
+  fields:
+    content:
+      name: Data
+      required: true
+      selector:
+        text:
+    alignment:
+      name: Alignment
+      selector:
+        select:
+          options:
+            - left
+            - center
+            - right
+      default: center
+    lines_after:
+      name: Lines after
+      selector:
+        number:
+          min: 0
+          max: 20
+      default: 3
+
+print_image:
+  name: Print image
+  description: >
+    Print an image, either fetched by the device itself from a URL, or
+    captured from a Home Assistant camera/image entity and sent inline.
+    Specify exactly one of "url" or "image_entity".
+  target: *notify_target
+  fields:
+    url:
+      name: Image URL
+      description: >
+        An http(s) URL the device will fetch itself. Mutually exclusive
+        with Image entity.
+      selector:
+        text:
+    image_entity:
+      name: Image entity
+      description: >
+        A camera or image entity to snapshot, base64-encode, and send.
+        Mutually exclusive with Image URL.
+      selector:
+        entity:
+          domain:
+            - image
+            - camera
+    lines_after:
+      name: Lines after
+      selector:
+        number:
+          min: 0
+          max: 20
+      default: 3
+
+print_raw:
+  name: Print raw job
+  description: >
+    Escape hatch for advanced use: send an arbitrary PrintJob "type" and
+    extra fields directly, without integration-side validation. Useful for
+    device print types added to the Android app after this integration was
+    written.
+  target: *notify_target
+  fields:
+    type:
+      name: Type
+      required: true
+      description: The PrintJob "type" value, e.g. "plain", "qr", "alert".
+      selector:
+        text:
+    data:
+      name: Extra fields
+      description: >
+        Arbitrary extra PrintJob fields (title, content, alignment,
+        titleSize, etc., using the device's camelCase key names) merged
+        verbatim into the JSON body alongside "type".
+      selector:
+        object:
