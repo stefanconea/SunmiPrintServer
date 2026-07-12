@@ -202,6 +202,21 @@ that calls `EntranceReceiptManager.setPaid(...)` immediately on toggle. All func
 both `MainActivity` and `EntranceReceiptsActivity` share the same underlying storage without needing
 an explicit `init(context)` call.
 
+### Backup / restore
+
+All SharedPreferences data (every Settings value plus `entrance_receipts`) is app-private storage
+that Android deletes on uninstall, with no way to recover it after the fact — `exportBackup()`
+(toolbar menu → "Backup Data") dumps `prefs.all` to a JSON file in the app's cache dir and hands
+it to the system share sheet via a `FileProvider` (declared in `AndroidManifest.xml` +
+`res/xml/file_paths.xml`), so the user picks where it actually lands (Drive, email, a file
+manager, etc.) — deliberately avoids `WRITE_EXTERNAL_STORAGE`/scoped-storage handling entirely.
+`importBackup()` (toolbar menu → "Restore Backup", backed by
+`ActivityResultContracts.OpenDocument()`) reverses this: reads the picked JSON file and replays
+every key back into `SharedPreferences`, type-dispatched off each `JsonPrimitive` (string/
+boolean/number — numbers always restore as `Int`, since every numeric preference this app stores,
+e.g. `guard_receipt_counter`, is one). A restored `EntranceReceiptManager` list only takes effect
+after the app restarts (the toast says so) since in-memory state isn't touched.
+
 ## Technical constraints
 
 - Native print width is fixed at **384px**; all rendering targets this width.

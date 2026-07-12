@@ -3,6 +3,7 @@ package com.example.sunmiprinttest
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.SharedPreferences
+import android.net.Uri
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -38,11 +39,14 @@ import android.widget.ImageView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import androidx.core.graphics.createBitmap
 import androidx.preference.PreferenceManager
 import androidx.appcompat.widget.Toolbar
 import com.google.gson.Gson
+import com.google.gson.JsonObject
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
@@ -61,6 +65,7 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
+import java.io.File
 import java.io.InputStream
 import java.io.InputStreamReader
 import java.net.InetSocketAddress
@@ -122,6 +127,10 @@ class MainActivity : AppCompatActivity() {
     private var previewRunnable: Runnable? = null
     private var previewCounter = 0
     private val printExecutor = Executors.newSingleThreadExecutor()
+
+    private val importBackupLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        if (uri != null) importBackup(uri)
+    }
 
     private val printerCallback = object : InnerPrinterCallback() {
         override fun onConnected(service: SunmiPrinterService) {
@@ -239,8 +248,71 @@ class MainActivity : AppCompatActivity() {
                 startActivity(Intent(this, EntranceReceiptsActivity::class.java))
                 return true
             }
+            R.id.action_backup -> {
+                exportBackup()
+                return true
+            }
+            R.id.action_restore -> {
+                importBackupLauncher.launch(arrayOf("application/json"))
+                return true
+            }
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    // Every SharedPreferences value this app stores (Settings + the guard_receipt counter
+    // + the full entrance receipts history) lives in app-private storage that Android wipes
+    // on uninstall -- this dumps it all to one JSON file and hands it to the share sheet so
+    // the user can save it somewhere that survives (Drive, email, a file manager, etc.).
+    private fun exportBackup() {
+        try {
+            val jsonObject = JsonObject()
+            for ((key, value) in prefs.all) {
+                when (value) {
+                    is String -> jsonObject.addProperty(key, value)
+                    is Boolean -> jsonObject.addProperty(key, value)
+                    is Int -> jsonObject.addProperty(key, value)
+                    is Long -> jsonObject.addProperty(key, value)
+                    is Float -> jsonObject.addProperty(key, value)
+                }
+            }
+            val backupDir = File(cacheDir, "backups").apply { mkdirs() }
+            val file = File(backupDir, "sunmi_print_backup.json")
+            file.writeText(gson.toJson(jsonObject))
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/json"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(intent, "Save Sunmi Print backup"))
+        } catch (e: Exception) {
+            Toast.makeText(this, "Backup failed: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // Restores every key from a previously exported backup. Values already correctly typed
+    // as JSON strings/booleans/numbers round-trip cleanly; numbers are restored as Int since
+    // every numeric preference this app stores (guard_receipt_counter, etc.) is an Int.
+    private fun importBackup(uri: Uri) {
+        try {
+            val text = contentResolver.openInputStream(uri)?.bufferedReader()?.readText()
+                ?: throw IllegalStateException("Could not read the selected file")
+            val jsonObject = gson.fromJson(text, JsonObject::class.java)
+            val editor = prefs.edit()
+            for ((key, element) in jsonObject.entrySet()) {
+                val primitive = element.asJsonPrimitive
+                when {
+                    primitive.isBoolean -> editor.putBoolean(key, primitive.asBoolean)
+                    primitive.isNumber -> editor.putInt(key, primitive.asInt)
+                    primitive.isString -> editor.putString(key, primitive.asString)
+                }
+            }
+            editor.apply()
+            Toast.makeText(this, "Backup restored. Restart the app to fully apply.", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Restore failed: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun startHttpServer() {
