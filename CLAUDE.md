@@ -87,6 +87,21 @@ timestamp, and a sequential receipt number (`#1-%04d`) persisted via a `SharedPr
 counter (`guard_receipt_counter`) so numbering survives across prints/app restarts. Company name
 (`guard_company_name`) and unit price (`guard_price`) are user-configurable in Settings, not
 passed per job — only `job.quantity` (default 1) varies the ticket (multiplies the line total).
+Total/Cash are right-aligned to the receipt's right edge via a real `AlignmentSpan`
+(`ALIGN_OPPOSITE`) per row, not character-count padding — two `SpannableStringBuilder` pitfalls
+worth knowing before touching this function again: (1) `renderTextToBitmap` picks one base
+alignment for the *entire* layout the moment any `ALIGN_OPPOSITE` span exists anywhere in it, so
+every paragraph needs its own explicit alignment span or it'll be swept into that base; (2)
+reusing a single `AlignmentSpan` (or likely any span) object across multiple `setSpan()` calls at
+different ranges *moves* its attachment each time rather than adding a new one — only the last
+range keeps it. Each row gets its own freshly-constructed span instance. Row font sizes
+(`bodySize`/`itemSize`/`totalSize`) and their monospace character budgets are reconciled via
+`monoCharsPerLine()`, which measures real glyph width with `Paint.measureText()` rather than
+guessing a linear scale factor — a guessed ratio was just wrong enough to wrap the item row and
+rule lines mid-word once the item font size changed. If you change any of these font sizes again,
+verify by temporarily dumping the rendered bitmap to a file (`bitmap.compress(...)` to
+`getExternalFilesDir(null)`) and pulling it via `adb pull` — job-log "Success" only proves the
+SDK accepted the bitmap, not that the layout is visually correct.
 
 ### Three inbound protocols + one outbound
 
