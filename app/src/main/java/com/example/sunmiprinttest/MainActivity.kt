@@ -7,7 +7,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Typeface
-import androidx.core.graphics.createBitmap
 import android.os.Bundle
 import android.os.RemoteException
 import android.text.Editable
@@ -33,6 +32,7 @@ import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.graphics.createBitmap
 import androidx.preference.PreferenceManager
 import androidx.appcompat.widget.Toolbar
 import com.google.gson.Gson
@@ -339,20 +339,31 @@ class MainActivity : AppCompatActivity() {
                     
                     while (socket.isConnected && !socket.isClosed) {
                         val bytesRead = inputStream.read(buffer)
-                        if (bytesRead == -1) break
+                        if (bytesRead == -1) break 
                         
                         val data = buffer.copyOfRange(0, bytesRead)
                         LogManager.addLog("Received $bytesRead bytes from HA")
                         
-                        val text = data.map { 
-                            val b = it.toInt() and 0xFF
-                            if (b in 32..126 || b == 10 || b == 13) b.toChar() else ' ' 
-                        }.joinToString("")
+                        // Smarter extraction: Skip ESC (27) and GS (29) command bytes
+                        val cleanOutput = StringBuilder()
+                        var i = 0
+                        while (i < data.size) {
+                            val b = data[i].toInt() and 0xFF
+                            if (b == 0x1B || b == 0x1D) {
+                                // It's a command prefix (ESC or GS), skip it and the identifier byte
+                                i += 2 
+                            } else {
+                                if (b in 32..126 || b == 10 || b == 13) {
+                                    cleanOutput.append(b.toChar())
+                                }
+                                i++
+                            }
+                        }
                         
-                        val cleanedText = text.replace(Regex("\\s+"), " ").trim()
-                        if (cleanedText.isNotEmpty()) {
-                            LogManager.addLog("Printing HA job: ${cleanedText.take(20)}...")
-                            runOnUiThread { remotePrint(PrintJob(content = cleanedText)) }
+                        val finalContent = cleanOutput.toString().replace(Regex("\\s+"), " ").trim()
+                        if (finalContent.isNotEmpty()) {
+                            LogManager.addLog("Printing cleaned HA job: ${finalContent.take(20)}...")
+                            runOnUiThread { remotePrint(PrintJob(content = finalContent)) }
                         }
                     }
                 } catch (e: Exception) {
@@ -665,6 +676,7 @@ class MainActivity : AppCompatActivity() {
                 isAntiAlias = true
             }
             
+            // Check if any AlignmentSpan is present to decide on base alignment
             val alignmentSpans = builder.getSpans(0, builder.length, AlignmentSpan::class.java)
             val baseAlignment = if (alignmentSpans.any { it.alignment == Layout.Alignment.ALIGN_CENTER }) {
                 Layout.Alignment.ALIGN_CENTER
