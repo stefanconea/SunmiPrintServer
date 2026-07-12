@@ -34,6 +34,14 @@
             app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="Alert Settings">
+        <SwitchPreferenceCompat
+            app:defaultValue="false"
+            app:key="alert_use_custom_size"
+            app:title="Use Custom Size for Alert Text"
+            app:summary="When off, the alert message always prints at a fixed large size regardless of Content Size." />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="Guard Receipt">
         <EditTextPreference
             app:defaultValue="Guard"

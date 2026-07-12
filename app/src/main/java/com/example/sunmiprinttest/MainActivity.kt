@@ -706,7 +706,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun generateStyledBuilder(job: PrintJob, source: String = "Local"): SpannableStringBuilder {
         val type = job.type ?: "plain"
-        if (type == "alert") return generateBanuSugeAlertBuilder(job.content ?: "6666", job.timestamp, source, job.boldContent ?: true)
+        if (type == "alert") return generateBanuSugeAlertBuilder(job.content ?: "6666", job.timestamp, source, job.boldContent ?: true, job.contentSize)
         val builder = SpannableStringBuilder()
         val title = job.title ?: ""; val content = job.content ?: job.text ?: job.message ?: ""
         val titleSize = job.titleSize ?: 32; val contentSize = job.contentSize ?: 26
@@ -763,9 +763,13 @@ class MainActivity : AppCompatActivity() {
         else -> source
     }
 
-    private fun generateBanuSugeAlertBuilder(content: String, sentTime: String? = null, source: String = "Local", boldContent: Boolean = true): SpannableStringBuilder {
+    private fun generateBanuSugeAlertBuilder(content: String, sentTime: String? = null, source: String = "Local", boldContent: Boolean = true, contentSize: Int? = null): SpannableStringBuilder {
         val sdf = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         val now = sdf.format(Date()); val sent = sentTime ?: now; val builder = SpannableStringBuilder(); val center = AlignmentSpan.Standard(Layout.Alignment.ALIGN_CENTER)
+        // Fixed at 50px unless the user opts in via Settings -- most callers rely on the
+        // alert's large, unmissable default and never think to set contentSize at all.
+        val useCustomSize = prefs.getBoolean("alert_use_custom_size", false)
+        val messageSize = if (useCustomSize) (contentSize ?: 50) else 50
         fun appendCentered(text: String, size: Int, bold: Boolean = false) {
             val start = builder.length; builder.append(text)
             builder.setSpan(AbsoluteSizeSpan(size), start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
@@ -773,7 +777,7 @@ class MainActivity : AppCompatActivity() {
             builder.setSpan(center, start, builder.length, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         appendCentered("ALERT\n", 60, true); appendCentered("WARNING\n", 32); appendCentered("\n", 20)
-        appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20); appendCentered("\n", 5); appendCentered("${content.trim()}\n", 50, boldContent); appendCentered("\n", 5); appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20)
+        appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20); appendCentered("\n", 5); appendCentered("${content.trim()}\n", messageSize, boldContent); appendCentered("\n", 5); appendCentered("- - - - - - - - - - - - - - - - - - - -\n", 20)
         appendCentered("\n", 15); appendCentered("* * * * * * *\n", 20); appendCentered("\n", 5); appendCentered("${alertSourceLabel(source)}\n", 26); appendCentered("sent: $sent\nrecv: $now\n", 22); appendCentered("\n", 5); appendCentered("* * * * * * *\n", 20)
         appendCentered("\n", 15); appendCentered("Thank you for using B.A.N.U.S.U.G.E\n", 26); appendCentered("(Background Alert Notification Utility for Security Updates & General Events)\n", 14)
         return builder
