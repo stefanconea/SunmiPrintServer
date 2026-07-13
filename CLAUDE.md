@@ -11,9 +11,11 @@ Sunmi SDK, so output always matches the on-screen preview exactly regardless of 
 
 ## Repository layout
 
-- `app/` — Android app (single module, package `com.example.sunmiprinttest`). Almost all logic
-  lives in `app/src/main/java/com/example/sunmiprinttest/MainActivity.kt` (~800 lines); this is
-  a monolithic single-Activity app, not a multi-file/MVVM structure.
+- `app/` — Android app (single module, package `com.example.sunmiprinttest`). The engine (all
+  three inbound servers, the outbound desktop client, the printer connection, and the whole
+  bitmap-rendering pipeline) lives in `PrintService.kt`, a foreground `Service` — see
+  "Background service" below. `MainActivity.kt` is a thin UI layer that binds to it; this is
+  not a multi-file/MVVM structure beyond that split.
 - `server.py` — standalone Tkinter desktop GUI that acts as a TCP *server* the Android app
   dials into (see Protocols below). `server.spec` is its PyInstaller build spec.
 - `custom_components/sunmi_printer/` — a Home Assistant custom integration (Python) that
@@ -73,6 +75,28 @@ PrintJob (data class) → processJob() → renderJobToBitmap() → thresholdBitm
 - The live preview (`updatePreview()`) renders the same `PrintJob` → bitmap/styled-text path on
   a 200ms debounce so the on-screen preview always matches what will physically print.
 
+### Background service
+
+`PrintService` (a foreground `Service`, not tied to `MainActivity`'s lifecycle) owns every piece
+of the engine: `PrintJob` (top-level data class), the three inbound servers, the desktop TCP
+client, the Sunmi SDK printer binding, `printExecutor`, and the entire render/print pipeline
+described above. It's started with `ContextCompat.startForegroundService()` from
+`MainActivity.onCreate()` and shows a low-priority persistent notification (required on Android
+8+ for a foreground service) — this is what keeps HTTP/ESC-POS/MQTT/desktop-TCP listening and the
+printer bound while the user is on the home screen, in another app, or with the screen off; a
+plain unbound Activity gets deprioritized (and eventually killed) by Android well before that.
+`MainActivity` only *binds* to it (`bindService`/`unbindService` in `onStart`/`onStop`) to receive
+live UI updates through `PrintService.Listener` and to call into `processJob()`/
+`renderJobToBitmap()`/`generateStyledBuilder()`/`toggleConnection()` for the on-screen preview and
+print buttons — it never starts or stops the service itself. The only way the service stops is the
+explicit "Exit App" preference in Settings (`SettingsActivity.SettingsFragment.confirmExit()`),
+which calls `stopService()` then `Process.killProcess(Process.myPid())` to guarantee a fully closed
+app rather than leaving anything backgrounded. If you add a new field the UI needs to observe
+(printer status, TCP status, etc.), add it to `PrintService.Listener` and read the service's
+current value once in `MainActivity.syncUiWithServiceState()` too — `Listener` callbacks only
+fire on future state changes, so anything that changed while `MainActivity` wasn't bound (e.g. the
+Activity was recreated) needs that explicit resync on (re)bind.
+
 ### `alert` / B.A.N.U.S.U.G.E mode
 
 A specialized high-visibility layout (`generateBanuSugeAlertBuilder`) for security/alert
@@ -131,7 +155,7 @@ correct.
 ### Three inbound protocols + one outbound
 
 The app runs three servers concurrently plus one outbound client, all started from
-`onCreate()`:
+`PrintService.onCreate()` (see "Background service" above):
 
 1. **HTTP** (`AppHttpServer`, NanoHTTPD, port 8081) — serves a minimal web UI at `/` and accepts
    `POST /print` with a `PrintJob`-shaped JSON body. (README also documents `/image` and
