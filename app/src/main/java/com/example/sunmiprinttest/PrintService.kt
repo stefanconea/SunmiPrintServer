@@ -188,7 +188,7 @@ class PrintService : Service() {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
 
-        if (isSunmiPrinterAvailable()) {
+        if (isSunmiDevice) {
             startHttpServer()
             startEscPosServer()
             autoConnectMqtt()
@@ -214,12 +214,16 @@ class PrintService : Service() {
     // from "running on some other Android device" -- checking for its package is more reliable
     // than matching Build.MANUFACTURER/MODEL strings, since it directly reflects the one thing
     // this app actually depends on. The <queries> block in AndroidManifest.xml is what makes
-    // this package visible to query at all on Android 11+.
-    private fun isSunmiPrinterAvailable(): Boolean = try {
-        packageManager.getPackageInfo("woyou.aidlservice.jiuiv5", 0)
-        true
-    } catch (_: PackageManager.NameNotFoundException) {
-        false
+    // this package visible to query at all on Android 11+. Lazy + cached since both onCreate()
+    // (to decide what to start) and buildNotification() (to describe what's actually running)
+    // need it, and it can't change during the service's lifetime.
+    private val isSunmiDevice: Boolean by lazy {
+        try {
+            packageManager.getPackageInfo("woyou.aidlservice.jiuiv5", 0)
+            true
+        } catch (_: PackageManager.NameNotFoundException) {
+            false
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
@@ -236,9 +240,14 @@ class PrintService : Service() {
     }
 
     private fun buildNotification(): Notification {
+        val contentText = if (isSunmiDevice) {
+            "Listening for print jobs (HTTP, ESC/POS, MQTT)"
+        } else {
+            "Remote print client -- no local servers running"
+        }
         val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Sunmi Print Server")
-            .setContentText("Listening for print jobs (HTTP, ESC/POS, MQTT)")
+            .setContentText(contentText)
             .setSmallIcon(android.R.drawable.ic_menu_send)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
