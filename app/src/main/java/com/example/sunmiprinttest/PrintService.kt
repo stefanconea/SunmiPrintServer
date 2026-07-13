@@ -33,6 +33,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.graphics.createBitmap
 import androidx.preference.PreferenceManager
 import com.google.gson.Gson
+import com.google.gson.JsonObject
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.google.zxing.common.BitMatrix
@@ -52,6 +53,7 @@ import java.io.BufferedReader
 import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.InputStreamReader
+import java.net.HttpURLConnection
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
@@ -591,7 +593,50 @@ class PrintService : Service() {
             val bitmap = overrideBitmap ?: renderJobToBitmap(job, source)
             val linesAfter = job.linesAfter
                 ?: prefs.getString("default_lines_after", "3")?.toIntOrNull() ?: 3
-            renderAndPrintBitmap(bitmap, linesAfter, jobId)
+            val remoteUrl = prefs.getString("remote_printer_url", "")?.trim()
+            if (printerService == null && !remoteUrl.isNullOrEmpty()) {
+                // No printer physically attached to this device (e.g. this app installed on an
+                // ordinary phone, not the Sunmi hardware) but a remote Sunmi is configured in
+                // Settings -- relay the already-fully-rendered bitmap to that device's own
+                // /print endpoint as a pre-rendered "image" job instead of failing. The remote
+                // side just base64-decodes and prints it as-is (see renderJobToBitmap's "image"
+                // branch) with no re-processing, so this app's own rotation/dithering work is
+                // preserved exactly.
+                relayBitmapToRemote(bitmap, remoteUrl, linesAfter, jobId)
+            } else {
+                renderAndPrintBitmap(bitmap, linesAfter, jobId)
+            }
+        }
+    }
+
+    private fun relayBitmapToRemote(bitmap: Bitmap, remoteUrl: String, linesAfter: Int, jobId: Int) {
+        try {
+            val baos = ByteArrayOutputStream()
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, baos)
+            val base64 = Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP)
+            val payload = JsonObject().apply {
+                addProperty("type", "image")
+                addProperty("content", base64)
+                addProperty("linesAfter", linesAfter)
+            }
+            val url = if (remoteUrl.contains(":")) "http://$remoteUrl/print" else "http://$remoteUrl:8081/print"
+            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                doOutput = true
+                connectTimeout = 5000
+                readTimeout = 5000
+                setRequestProperty("Content-Type", "application/json")
+            }
+            connection.outputStream.use { it.write(gson.toJson(payload).toByteArray(Charsets.UTF_8)) }
+            val code = connection.responseCode
+            connection.disconnect()
+            if (code in 200..299) {
+                JobLogManager.completeJob(jobId, true, null)
+            } else {
+                JobLogManager.completeJob(jobId, false, "remote printer returned HTTP $code")
+            }
+        } catch (e: Exception) {
+            JobLogManager.completeJob(jobId, false, "remote relay failed: ${e.message}")
         }
     }
 

@@ -241,6 +241,24 @@ again:
    If the `image` job type's photo quality ever gets a complaint too, the same fix likely applies
    there.
 
+### Remote printing (no local Sunmi hardware)
+
+`SunmiPrintService` only works installed on the Sunmi V2 Pro itself, since it talks to the
+printer through the local `woyou.aidlservice.jiuiv5` AIDL service — there's no such service on an
+ordinary phone. To still let "Sunmi Printer" show up in an *ordinary* phone/tablet's own print
+menu and actually reach the physical printer, `processJob()` in `PrintService` checks
+`printerService` (the local SDK connection) at dispatch time: if it's null (no printer physically
+attached to this device) and Settings' `remote_printer_url` is non-empty, the job is relayed
+instead of failed — `relayBitmapToRemote()` POSTs the already-fully-rendered bitmap (post
+rotation, post dithering) as base64 PNG to the configured device's own `POST /print` endpoint,
+using the existing `image` job type (`renderJobToBitmap()`'s `image` branch just base64-decodes
+and prints as-is, no re-processing) so nothing gets reprocessed or degraded in transit. This means
+the *same APK* serves both roles with no build variant needed: on the Sunmi device itself
+`printerService` is always non-null once the SDK binds, so this path is simply never taken there
+regardless of what (if anything) `remote_printer_url` is set to; on any other device, printing
+always falls through to the relay as long as that setting points at a reachable Sunmi. Leave
+`remote_printer_url` empty on the Sunmi device itself.
+
 Registered via `AndroidManifest.xml` (`<service android:name=".SunmiPrintService"
 android:permission="android.permission.BIND_PRINT_SERVICE">`, a system signature permission so
 only the real print spooler can bind it) + `res/xml/printservice.xml`. Same rule as accessibility

@@ -63,6 +63,13 @@
             app:key="open_print_settings"
             app:title="Enable as Android Print Service"
             app:summary="Opens Android's Printing settings so you can turn on Sunmi Printer as a print target for Gallery, Chrome, PDF viewers, etc." />
+
+        <EditTextPreference
+            app:defaultValue=""
+            app:key="remote_printer_url"
+            app:singleLine="true"
+            app:title="Remote Printer Address"
+            app:summary="Leave empty on the Sunmi printer itself. On any other phone/tablet, set this to the Sunmi device's ip:port (e.g. 192.168.1.50:8081) -- print jobs on this device with no local printer attached get sent there over WiFi instead." />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="App">
