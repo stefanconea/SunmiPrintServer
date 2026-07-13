@@ -267,6 +267,18 @@ relay. The status *text* still distinguishes the three real states (`status_conn
 `status_remote` / `status_disconnected`) rather than collapsing them, so it stays honest about
 whether this device has a printer physically attached.
 
+`PrintService.onCreate()` also skips starting the inbound servers (HTTP/ESC-POS/MQTT) and the
+outbound desktop TCP client entirely — not just the local SDK bind — when
+`isSunmiPrinterAvailable()` returns false. That check queries `PackageManager` for
+`woyou.aidlservice.jiuiv5` (the Sunmi SDK's AIDL service package) rather than matching
+`Build.MANUFACTURER`/`MODEL` strings, since it directly reflects the one thing this app actually
+depends on; the `<queries>` block in `AndroidManifest.xml` is what makes that package visible to
+query on Android 11+. None of those servers/clients serve any purpose on a phone acting purely as
+a remote print client, so there's no reason to have them listening/dialing out at all there. This
+only gates *those* four things — the foreground service itself and `SunmiPrintService`'s Android
+Print Framework registration always still run regardless, since that's what a remote client needs
+to receive OS print jobs and relay them (see "Remote printing" above).
+
 Registered via `AndroidManifest.xml` (`<service android:name=".SunmiPrintService"
 android:permission="android.permission.BIND_PRINT_SERVICE">`, a system signature permission so
 only the real print spooler can bind it) + `res/xml/printservice.xml`. Same rule as accessibility

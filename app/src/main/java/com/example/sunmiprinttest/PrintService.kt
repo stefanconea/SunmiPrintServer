@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.SharedPreferences
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -187,16 +188,38 @@ class PrintService : Service() {
         createNotificationChannel()
         startForeground(NOTIFICATION_ID, buildNotification())
 
-        startHttpServer()
-        startEscPosServer()
-        autoConnectMqtt()
-        autoConnectDesktopServer()
-
-        try {
-            InnerPrinterManager.getInstance().bindService(this, printerCallback)
-        } catch (e: InnerPrinterException) {
-            LogManager.addLog("Printer bind error: ${e.message}")
+        if (isSunmiPrinterAvailable()) {
+            startHttpServer()
+            startEscPosServer()
+            autoConnectMqtt()
+            autoConnectDesktopServer()
+            try {
+                InnerPrinterManager.getInstance().bindService(this, printerCallback)
+            } catch (e: InnerPrinterException) {
+                LogManager.addLog("Printer bind error: ${e.message}")
+            }
+        } else {
+            // No point running the inbound servers (HTTP/ESC-POS/MQTT) or the outbound desktop
+            // TCP client, or attempting to bind a printer SDK service that doesn't exist here --
+            // this is some other phone/tablet, not the Sunmi hardware. It still runs as a
+            // foreground service and SunmiPrintService still registers normally so this device
+            // can act as a remote print client (see processJob()'s relay branch, canPrint).
+            httpServerInfoText = "Not running (remote client mode)"
+            tcpServerInfoText = "Not running (remote client mode)"
+            LogManager.addLog("Sunmi printer service not found on this device -- running as a remote print client only")
         }
+    }
+
+    // The Sunmi SDK's AIDL service is what actually distinguishes "running on the Sunmi V2 Pro"
+    // from "running on some other Android device" -- checking for its package is more reliable
+    // than matching Build.MANUFACTURER/MODEL strings, since it directly reflects the one thing
+    // this app actually depends on. The <queries> block in AndroidManifest.xml is what makes
+    // this package visible to query at all on Android 11+.
+    private fun isSunmiPrinterAvailable(): Boolean = try {
+        packageManager.getPackageInfo("woyou.aidlservice.jiuiv5", 0)
+        true
+    } catch (_: PackageManager.NameNotFoundException) {
+        false
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
