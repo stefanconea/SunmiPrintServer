@@ -119,7 +119,12 @@ class SunmiPrintService : AndroidPrintService() {
                     page.render(rawBitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
                     page.close()
                     val bitmap = if (isLandscape) {
-                        val rotateMatrix = Matrix().apply { postRotate(90f) }
+                        // Rotating a landscape page onto a portrait strip has two valid
+                        // directions (CW vs CCW) and nothing in the rasterized PDF page tells us
+                        // which one is "upright" -- -90 matches what's actually been observed
+                        // on real prints; if a future source ever needs the other direction,
+                        // this is the one spot to reconsider.
+                        val rotateMatrix = Matrix().apply { postRotate(-90f) }
                         Bitmap.createBitmap(rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, rotateMatrix, true)
                     } else rawBitmap
                     service.processImageBitmap(bitmap, "Print Service")
