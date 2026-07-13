@@ -753,6 +753,20 @@ class PrintService : Service() {
         return builder
     }
 
+    // Entry point for bitmaps that arrive already fully rendered from outside the PrintJob
+    // pipeline -- currently just SunmiPrintService rasterizing a page from the Android Print
+    // Framework (Gallery, Chrome, PDF viewers, ...). Scales to the fixed 384px print width if
+    // needed, then reuses the same threshold pass every other image path goes through, since
+    // the printer has no real greyscale.
+    fun processImageBitmap(bitmap: Bitmap, source: String) {
+        val width = 384
+        val scaled = if (bitmap.width != width) {
+            val scale = width.toFloat() / bitmap.width
+            Bitmap.createScaledBitmap(bitmap, width, (bitmap.height * scale).toInt().coerceAtLeast(1), true)
+        } else bitmap
+        processJob(PrintJob(type = "bitmap"), thresholdBitmap(scaled), source)
+    }
+
     fun renderJobToBitmap(job: PrintJob, source: String = "Local"): Bitmap {
         val width = 384; val type = job.type ?: "plain"
         if (type == "guard_receipt") {

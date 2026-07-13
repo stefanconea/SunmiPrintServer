@@ -178,6 +178,45 @@ The app runs three servers concurrently plus one outbound client, all started fr
 When adding a new inbound source, normalize into a `PrintJob` and call `processJob()` — don't
 bypass the bitmap pipeline or the print executor.
 
+### System Print Service (fifth inbound path)
+
+`SunmiPrintService` (extends `android.printservice.PrintService`, a *different* class from this
+app's own `PrintService` foreground service — aliased as `AndroidPrintService` in that file to
+avoid a same-name collision) registers this app as a system-level Android Print Service, so
+"Sunmi Printer" shows up as a target from any app's native Print action (Gallery, Chrome, PDF
+viewers, ...), not just this app's own protocols. `SunmiPrinterDiscoverySession` reports one
+fixed virtual printer with a custom `PrintAttributes.MediaSize` ("Receipt Roll", 48mm wide —
+384px at ~203dpi, matching the "Technical constraints" section below) since there's nothing to
+actually discover. Unlike every other inbound path, this one doesn't go through `processJob()`
+directly with a `PrintJob`: the system spools whatever the calling app rendered as a PDF, and
+`onPrintJobQueued()` rasterizes each page with `PdfRenderer` into a 384px-wide bitmap, then calls
+`PrintService.processImageBitmap()` (a raw-bitmap entry point that scales + thresholds before
+handing off to `processJob()`, mirroring what `renderJobToBitmap()`'s `image` branch does for
+base64/URL images).
+
+Two non-obvious framework gotchas hit during this integration, both worth knowing before touching
+`SunmiPrintService` again:
+1. `PdfRenderer` requires a *seekable* file descriptor, but `printJob.document.data` from the
+   spooler is a streamed pipe — passing it straight to `PdfRenderer` throws immediately. Drain it
+   into a local cache file first (`ParcelFileDescriptor.AutoCloseInputStream(...).copyTo(...)`),
+   then open *that* file with `PdfRenderer`. Skipping this doesn't just fail silently on our side —
+   it also EPIPEs the system print spooler process (visible in logcat as
+   `PrintSpoolerService: Error writing print job data!`), which can crash and restart the spooler.
+2. `PrintJob.start()`/`.complete()`/`.fail()`/`.cancel()` all throw `IllegalAccessError` if called
+   off the main thread. `onPrintJobQueued()` itself runs on the main thread (framework contract),
+   so `start()` happens there directly; the actual PDF rendering runs on a background thread, which
+   hops back via a `Handler(Looper.getMainLooper())` only to report `complete()`/`fail()`.
+
+Registered via `AndroidManifest.xml` (`<service android:name=".SunmiPrintService"
+android:permission="android.permission.BIND_PRINT_SERVICE">`, a system signature permission so
+only the real print spooler can bind it) + `res/xml/printservice.xml`. Same rule as accessibility
+services: an app cannot self-enable as a print service — the user has to manually turn it on once
+under Android's own Printing settings. Settings → "Enable as Android Print Service" jumps straight
+to that system screen (`Settings.ACTION_PRINT_SETTINGS`); note that screen has been observed
+rendering completely blank on this device's ODM ROM even though the service registers and works
+correctly (confirmed via `adb shell dumpsys print` and an actual print from Chrome) — don't trust
+that screen's appearance as a signal of whether registration succeeded.
+
 ### Settings
 
 User-configurable values (desktop server URL, MQTT broker/topic, default lines-after, guard

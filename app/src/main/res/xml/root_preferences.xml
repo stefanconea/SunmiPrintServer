@@ -58,6 +58,13 @@
             app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="Print Service">
+        <Preference
+            app:key="open_print_settings"
+            app:title="Enable as Android Print Service"
+            app:summary="Opens Android's Printing settings so you can turn on Sunmi Printer as a print target for Gallery, Chrome, PDF viewers, etc." />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="App">
         <Preference
             app:key="exit_app"

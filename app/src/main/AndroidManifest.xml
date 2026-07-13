@@ -48,6 +48,22 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- Registers this app as a system Print Service (Settings -> Printing), so the Sunmi
+             printer shows up as a target from any app's Print action (Gallery, Chrome, PDF
+             viewers, ...). android:permission is the framework's own signature permission,
+             so only the real system print spooler can bind this, not arbitrary apps. -->
+        <service
+            android:name=".SunmiPrintService"
+            android:permission="android.permission.BIND_PRINT_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.printservice.PrintService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.printservice"
+                android:resource="@xml/printservice" />
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

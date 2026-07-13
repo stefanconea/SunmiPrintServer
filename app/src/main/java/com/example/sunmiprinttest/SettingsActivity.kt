@@ -3,7 +3,9 @@ package com.example.sunmiprinttest
 import android.content.Intent
 import android.os.Bundle
 import android.os.Process
+import android.provider.Settings
 import android.view.MenuItem
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.preference.Preference
@@ -36,6 +38,14 @@ class SettingsActivity : AppCompatActivity() {
             setPreferencesFromResource(R.xml.root_preferences, rootKey)
             findPreference<Preference>("exit_app")?.setOnPreferenceClickListener {
                 confirmExit()
+                true
+            }
+            findPreference<Preference>("open_print_settings")?.setOnPreferenceClickListener {
+                try {
+                    startActivity(Intent(Settings.ACTION_PRINT_SETTINGS))
+                } catch (_: Exception) {
+                    Toast.makeText(requireContext(), "Could not open Android's print settings", Toast.LENGTH_SHORT).show()
+                }
                 true
             }
         }
