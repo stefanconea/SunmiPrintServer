@@ -756,19 +756,60 @@ class PrintService : Service() {
     // Entry point for bitmaps that arrive already fully rendered from outside the PrintJob
     // pipeline -- currently just SunmiPrintService rasterizing a page from the Android Print
     // Framework (Gallery, Chrome, PDF viewers, ...). Scales to the fixed 384px print width if
-    // needed. Deliberately does NOT run this through thresholdBitmap() -- that function is a
-    // crude edge-aware black/white threshold tuned for text/line-art bitmaps (see
-    // renderTextToBitmap), and produces a harsh, ugly result on photos; the existing "image" job
-    // type (base64/URL images, see renderJobToBitmap) never thresholds either, instead handing
-    // the SDK's printBitmap() a plain grayscale/color bitmap directly and letting it do its own
-    // (much better tuned) dithering. Keep this path consistent with that one.
+    // needed, then runs it through Floyd-Steinberg dithering (see ditherBitmap) rather than
+    // handing the SDK's printBitmap() a raw grayscale/color bitmap -- neither
+    // thresholdBitmap()'s crude edge-aware threshold (built for text/line-art, see
+    // renderTextToBitmap) nor the SDK's own internal conversion produce an acceptable result on
+    // photos; proper error-diffusion dithering is what actually reads as a photo on a 1-bit
+    // printer.
     fun processImageBitmap(bitmap: Bitmap, source: String) {
         val width = 384
         val scaled = if (bitmap.width != width) {
             val scale = width.toFloat() / bitmap.width
             Bitmap.createScaledBitmap(bitmap, width, (bitmap.height * scale).toInt().coerceAtLeast(1), true)
         } else bitmap
-        processJob(PrintJob(type = "bitmap"), scaled, source)
+        processJob(PrintJob(type = "bitmap"), ditherBitmap(scaled), source)
+    }
+
+    // Floyd-Steinberg error-diffusion dithering: converts to grayscale, then for each pixel
+    // (in reading order) rounds to pure black/white and pushes the rounding error onto its
+    // not-yet-visited neighbors (right, below-left, below, below-right) with the classic
+    // 7/3/5/1 -over-16 weights. This is what makes a 1-bit-per-pixel printer able to fake
+    // continuous tone -- a flat threshold (see thresholdBitmap) just posterizes into harsh
+    // blobs since it makes every pixel's decision independently.
+    private fun ditherBitmap(bitmap: Bitmap): Bitmap {
+        val width = bitmap.width
+        val height = bitmap.height
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        val gray = FloatArray(width * height)
+        for (i in pixels.indices) {
+            val c = pixels[i]
+            val r = (c shr 16) and 0xff
+            val g = (c shr 8) and 0xff
+            val b = c and 0xff
+            gray[i] = 0.299f * r + 0.587f * g + 0.114f * b
+        }
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val i = y * width + x
+                val oldValue = gray[i]
+                val newValue = if (oldValue < 128f) 0f else 255f
+                val error = oldValue - newValue
+                gray[i] = newValue
+                if (x + 1 < width) gray[i + 1] += error * 7f / 16f
+                if (x - 1 >= 0 && y + 1 < height) gray[i + width - 1] += error * 3f / 16f
+                if (y + 1 < height) gray[i + width] += error * 5f / 16f
+                if (x + 1 < width && y + 1 < height) gray[i + width + 1] += error * 1f / 16f
+            }
+        }
+        val resultPixels = IntArray(width * height)
+        for (i in pixels.indices) {
+            resultPixels[i] = if (gray[i] < 128f) Color.BLACK else Color.WHITE
+        }
+        val out = createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        out.setPixels(resultPixels, 0, width, 0, 0, width, height)
+        return out
     }
 
     fun renderJobToBitmap(job: PrintJob, source: String = "Local"): Bitmap {

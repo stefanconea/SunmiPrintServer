@@ -219,15 +219,27 @@ again:
    rotated 90° before printing: the printer only ever has 384px in one fixed physical axis (the
    roll's width), so a page wider than it is tall would otherwise print sideways relative to the
    roll's natural (portrait) feed direction. `onPrintJobQueued()` detects this and rotates the
-   rasterized bitmap with `Matrix().postRotate(90f)` after rendering, before handing it to
-   `processImageBitmap()`.
-4. `processImageBitmap()` deliberately does **not** run photos through `thresholdBitmap()` — that
-   function is a crude edge-aware black/white threshold built for text/line-art (see
-   `renderTextToBitmap`), and produces a harsh, ugly result on photographic content. This mirrors
-   the pre-existing `image` job type (base64/URL images) in `renderJobToBitmap()`, which also
-   never thresholds — both hand the SDK's `printBitmap()` a plain grayscale/color bitmap and let
-   it do its own dithering. Don't add a threshold call back into either path without testing an
-   actual photo print, not just a bitmap dump.
+   rasterized bitmap with `Matrix().postRotate(-90f)` after rendering (`-90`, not `+90` — the two
+   directions are geometrically equivalent for "landscape becomes portrait" but only one prints
+   right-side-up rather than upside-down; there's no way to derive which from the PDF page alone,
+   this was found by testing an actual print), before handing it to `processImageBitmap()`.
+4. The Android print dialog's own Portrait/Landscape orientation toggle is a generic system UI
+   feature completely outside a print service's control (no `PrinterCapabilitiesInfo` API exists
+   to restrict it) — picking "Landscape" there makes the *preview pane* render sideways, which
+   looks alarming but is cosmetic only. It doesn't affect the actual printed output: point 3 above
+   detects and corrects orientation from the real PDF page dimensions regardless of what the
+   dialog's toggle was set to, so the physical print comes out correctly oriented either way. Don't
+   try to "fix" the preview — there's no hook available to do so.
+5. `processImageBitmap()` runs photos through `ditherBitmap()` (Floyd-Steinberg error-diffusion
+   dithering) rather than handing the SDK's `printBitmap()` a raw grayscale/color bitmap directly.
+   Two things were tried and rejected first: `thresholdBitmap()` (the edge-aware threshold built
+   for text/line-art in `renderTextToBitmap`) posterizes photos into harsh blobs since it decides
+   each pixel independently with no error diffusion; and handing the SDK a raw bitmap untouched
+   (matching what the pre-existing `image` job type in `renderJobToBitmap()` does for base64/URL
+   images) turned out to look little better, since the SDK's own internal conversion isn't well
+   tuned for photos either. Proper dithering is what actually reads as a photo on a 1-bit printer.
+   If the `image` job type's photo quality ever gets a complaint too, the same fix likely applies
+   there.
 
 Registered via `AndroidManifest.xml` (`<service android:name=".SunmiPrintService"
 android:permission="android.permission.BIND_PRINT_SERVICE">`, a system signature permission so
