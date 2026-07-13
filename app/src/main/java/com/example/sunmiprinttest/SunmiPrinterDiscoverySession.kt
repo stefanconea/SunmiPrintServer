@@ -13,12 +13,18 @@ class SunmiPrinterDiscoverySession(private val service: SunmiPrintService) : Pri
 
     override fun onStartPrinterDiscovery(priorityList: MutableList<PrinterId>) {
         val printerId = service.printerId("sunmi_v2_pro")
-        // 384px native width at ~203dpi (see CLAUDE.md's "Technical constraints") is ~48mm, the
-        // standard printable width for 58mm thermal roll paper. Height is just a bounded stand-in
-        // for "however long the receipt/photo ends up being" -- Android's print framework needs a
-        // finite page size -- PrintService.processImageBitmap() prints the actual rendered height
-        // regardless of this cap.
-        val mediaSize = PrintAttributes.MediaSize("SUNMI_ROLL_48MM", "Receipt Roll (48mm)", 1890, 11800)
+        // 58mm is the printer's nominal/marketed paper size (what's actually loaded as roll
+        // stock); the 384px native render width (see CLAUDE.md's "Technical constraints") only
+        // covers the narrower ~48mm printable strip within that, which PrintService already
+        // renders at correctly regardless of what width is declared here. Height is just a
+        // bounded stand-in for "however long the content ends up being" -- Android's print
+        // framework needs a finite page size, and longer documents simply paginate into multiple
+        // PdfRenderer pages, each printed as its own bitmap (see SunmiPrintService). Keeping this
+        // moderate (not e.g. a multi-hundred-mm "endless roll" ratio) matters for photos: apps'
+        // default image print adapters scale to *fill* the whole declared page and crop whatever
+        // overflows, so a page far taller than it is wide forces brutal cropping down to a sliver
+        // of the image. This ratio is a compromise, not a perfect fit for every aspect ratio.
+        val mediaSize = PrintAttributes.MediaSize("SUNMI_ROLL_58MM", "Receipt Roll (58mm)", 2283, 3543)
         val resolution = PrintAttributes.Resolution("sunmi_203dpi", "203 dpi", 203, 203)
         val capabilities = PrinterCapabilitiesInfo.Builder(printerId)
             .addMediaSize(mediaSize, true)

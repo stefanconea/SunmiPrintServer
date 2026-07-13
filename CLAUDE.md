@@ -185,17 +185,26 @@ app's own `PrintService` foreground service — aliased as `AndroidPrintService`
 avoid a same-name collision) registers this app as a system-level Android Print Service, so
 "Sunmi Printer" shows up as a target from any app's native Print action (Gallery, Chrome, PDF
 viewers, ...), not just this app's own protocols. `SunmiPrinterDiscoverySession` reports one
-fixed virtual printer with a custom `PrintAttributes.MediaSize` ("Receipt Roll", 48mm wide —
-384px at ~203dpi, matching the "Technical constraints" section below) since there's nothing to
-actually discover. Unlike every other inbound path, this one doesn't go through `processJob()`
-directly with a `PrintJob`: the system spools whatever the calling app rendered as a PDF, and
-`onPrintJobQueued()` rasterizes each page with `PdfRenderer` into a 384px-wide bitmap, then calls
-`PrintService.processImageBitmap()` (a raw-bitmap entry point that scales + thresholds before
-handing off to `processJob()`, mirroring what `renderJobToBitmap()`'s `image` branch does for
-base64/URL images).
+fixed virtual printer with a custom `PrintAttributes.MediaSize` — "Receipt Roll (58mm)", the
+printer's nominal/marketed paper size (2283×3543 mils, roughly a 1.5:1 aspect) — since there's
+nothing to actually discover. The declared width is intentionally the *paper* width (58mm), not
+the narrower ~48mm printable strip the 384px render actually uses (see "Technical constraints"
+below); `PrintService` always renders at the correct 384px regardless of what width is declared
+here. The declared *height* is a deliberate compromise, not a hardware constraint: Android's print
+framework needs some finite page size, and apps' default image-print adapters scale a photo to
+*fill* the whole declared page and crop whatever overflows, so a page far taller than it is wide
+(the original attempt used a ~300mm/6:1 ratio) forces brutal cropping down to a thin sliver of the
+photo. A page that's too short isn't free either — it just means longer documents paginate into
+more discrete `PdfRenderer` pages, each printed as its own sequential bitmap (which is fine, but
+looks like a compromise either way; there's no single page shape that's right for both a tall text
+receipt and a landscape photo). Unlike every other inbound path, this one doesn't go through
+`processJob()` directly with a `PrintJob`: the system spools whatever the calling app rendered as
+a PDF, and `onPrintJobQueued()` rasterizes each page with `PdfRenderer` into a 384px-wide bitmap,
+then calls `PrintService.processImageBitmap()` (a raw-bitmap entry point that scales before
+handing off to `processJob()`).
 
-Two non-obvious framework gotchas hit during this integration, both worth knowing before touching
-`SunmiPrintService` again:
+Framework gotchas hit during this integration, worth knowing before touching `SunmiPrintService`
+again:
 1. `PdfRenderer` requires a *seekable* file descriptor, but `printJob.document.data` from the
    spooler is a streamed pipe — passing it straight to `PdfRenderer` throws immediately. Drain it
    into a local cache file first (`ParcelFileDescriptor.AutoCloseInputStream(...).copyTo(...)`),
@@ -206,6 +215,19 @@ Two non-obvious framework gotchas hit during this integration, both worth knowin
    off the main thread. `onPrintJobQueued()` itself runs on the main thread (framework contract),
    so `start()` happens there directly; the actual PDF rendering runs on a background thread, which
    hops back via a `Handler(Looper.getMainLooper())` only to report `complete()`/`fail()`.
+3. A landscape-oriented PDF page (`page.width > page.height`, e.g. a horizontal photo) has to be
+   rotated 90° before printing: the printer only ever has 384px in one fixed physical axis (the
+   roll's width), so a page wider than it is tall would otherwise print sideways relative to the
+   roll's natural (portrait) feed direction. `onPrintJobQueued()` detects this and rotates the
+   rasterized bitmap with `Matrix().postRotate(90f)` after rendering, before handing it to
+   `processImageBitmap()`.
+4. `processImageBitmap()` deliberately does **not** run photos through `thresholdBitmap()` — that
+   function is a crude edge-aware black/white threshold built for text/line-art (see
+   `renderTextToBitmap`), and produces a harsh, ugly result on photographic content. This mirrors
+   the pre-existing `image` job type (base64/URL images) in `renderJobToBitmap()`, which also
+   never thresholds — both hand the SDK's `printBitmap()` a plain grayscale/color bitmap and let
+   it do its own dithering. Don't add a threshold call back into either path without testing an
+   actual photo print, not just a bitmap dump.
 
 Registered via `AndroidManifest.xml` (`<service android:name=".SunmiPrintService"
 android:permission="android.permission.BIND_PRINT_SERVICE">`, a system signature permission so

@@ -103,14 +103,25 @@ class SunmiPrintService : AndroidPrintService() {
                 val renderer = PdfRenderer(ParcelFileDescriptor.open(tempFile, ParcelFileDescriptor.MODE_READ_ONLY))
                 for (i in 0 until renderer.pageCount) {
                     val page = renderer.openPage(i)
-                    val scale = 384f / page.width
-                    val outHeight = (page.height * scale).toInt().coerceAtLeast(1)
-                    val bitmap = createBitmap(384, outHeight, Bitmap.Config.ARGB_8888)
-                    val canvas = Canvas(bitmap)
+                    // A landscape page (e.g. a horizontal photo) has to be rotated 90 degrees --
+                    // the printer only ever has 384px to work with in one fixed axis (the roll's
+                    // width), so a wider-than-tall page must become taller-than-wide to print
+                    // right-side-up on a narrow continuous roll, not sideways.
+                    val isLandscape = page.width > page.height
+                    val fitDimension = if (isLandscape) page.height else page.width
+                    val scale = 384f / fitDimension
+                    val renderWidth = (page.width * scale).toInt().coerceAtLeast(1)
+                    val renderHeight = (page.height * scale).toInt().coerceAtLeast(1)
+                    val rawBitmap = createBitmap(renderWidth, renderHeight, Bitmap.Config.ARGB_8888)
+                    val canvas = Canvas(rawBitmap)
                     canvas.drawColor(Color.WHITE)
                     val matrix = Matrix().apply { setScale(scale, scale) }
-                    page.render(bitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
+                    page.render(rawBitmap, null, matrix, PdfRenderer.Page.RENDER_MODE_FOR_PRINT)
                     page.close()
+                    val bitmap = if (isLandscape) {
+                        val rotateMatrix = Matrix().apply { postRotate(90f) }
+                        Bitmap.createBitmap(rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, rotateMatrix, true)
+                    } else rawBitmap
                     service.processImageBitmap(bitmap, "Print Service")
                 }
                 renderer.close()
