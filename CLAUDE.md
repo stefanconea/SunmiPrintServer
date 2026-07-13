@@ -129,7 +129,12 @@ ZXing's `MultiFormatWriter`) are drawn onto one final `Canvas`, text first, QR c
 The counter is persisted in `SharedPreferences` (`guard_receipt_counter`) so numbering survives
 app restarts; company name (`guard_company_name`) and unit price (`guard_price`) are
 user-configurable in Settings, not passed per job — only `job.quantity` (default 1) varies the
-ticket (multiplies the line total).
+ticket (multiplies the line total). The `#<prefix>-%04d` prefix itself is also a per-device
+Setting (`guard_receipt_prefix`, default `"1"`) rather than hardcoded — since this same counter
+lives in each device's own `SharedPreferences`, a phone printing entrance receipts through the
+remote relay (see "Remote printing" below) tracks its own independent counter from the Sunmi
+device's, and would silently collide on the same `#1-0001`-style numbers without a distinct
+prefix per device.
 
 Row-level text layout inside `generateGuardReceiptBuilder()` uses `padRow()` (manual space
 padding, not `AlignmentSpan`) to position Total/Cash values — an `AlignmentSpan(ALIGN_OPPOSITE)`
@@ -359,3 +364,9 @@ after the app restarts (the toast says so) since in-memory state isn't touched.
   spaces (table-like content), specifically to keep ASCII table borders aligned on the printer's
   fixed character grid.
 - ESC/POS text bytes are decoded as `ISO-8859-1` for hardware symbol-set compatibility.
+- `Theme.SunmiPrintTest` (`res/values/themes.xml`) is deliberately `Theme.Material3.Light.NoActionBar`,
+  not `.DayNight.` — layouts/adapters (e.g. `EntranceReceiptsActivity`'s paid/unpaid row colors)
+  hardcode colors tuned for a light background and aren't dark-mode aware, so following the
+  system's dark mode produced a broken half-dark/half-hardcoded-light UI on any device that
+  actually has dark mode on (the Sunmi's own ROM apparently never triggers it, which is why this
+  wasn't noticed until the app ran on an ordinary phone).

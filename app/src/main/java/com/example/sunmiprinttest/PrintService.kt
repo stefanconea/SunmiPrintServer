@@ -896,9 +896,13 @@ class PrintService : Service() {
             val quantity = job.quantity ?: 1
 
             // Persisted across prints so receipts are sequentially numbered like a real POS.
+            // The prefix is per-device (guard_receipt_prefix, default "1") so each device
+            // printing entrance receipts -- e.g. the Sunmi itself vs. a phone printing via the
+            // remote relay -- gets a distinguishable receipt number range instead of colliding.
             val counter = prefs.getInt("guard_receipt_counter", 0) + 1
             prefs.edit().putInt("guard_receipt_counter", counter).apply()
-            val receiptNumber = "#1-%04d".format(counter)
+            val prefix = prefs.getString("guard_receipt_prefix", "1")?.trim()?.takeIf { it.isNotEmpty() } ?: "1"
+            val receiptNumber = "#$prefix-%04d".format(counter)
             val sdf = SimpleDateFormat("dd-MM-yyyy hh:mm a", Locale.getDefault())
             val now = sdf.format(Date())
 

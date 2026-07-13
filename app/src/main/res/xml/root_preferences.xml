@@ -56,6 +56,13 @@
             app:singleLine="true"
             app:title="Price per Entry"
             app:useSimpleSummaryProvider="true" />
+
+        <EditTextPreference
+            app:defaultValue="1"
+            app:key="guard_receipt_prefix"
+            app:singleLine="true"
+            app:title="Receipt Number Prefix"
+            app:summary="The &quot;1&quot; in #1-0001 -- give each device printing entrance receipts (e.g. this phone vs. the Sunmi itself) its own prefix so numbers don't collide." />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="Print Service">
