@@ -157,6 +157,16 @@ class PrintService : Service() {
 
     val isTcpConnected: Boolean get() = tcpSocket != null && tcpSocket?.isClosed != true
 
+    // Non-empty only when this device has no local printer of its own and is configured to
+    // relay jobs to one elsewhere (see processJob()'s remote-relay branch) -- lets the UI treat
+    // "can actually print" as local-hardware-connected OR remote-relay-configured, rather than
+    // just the former, so the manual print form isn't uselessly disabled on a phone acting purely
+    // as a remote client.
+    val remotePrinterUrl: String?
+        get() = prefs.getString("remote_printer_url", "")?.trim()?.takeIf { it.isNotEmpty() }
+
+    val canPrint: Boolean get() = printerService != null || remotePrinterUrl != null
+
     private val printerCallback = object : InnerPrinterCallback() {
         override fun onConnected(service: SunmiPrinterService) {
             printerService = service

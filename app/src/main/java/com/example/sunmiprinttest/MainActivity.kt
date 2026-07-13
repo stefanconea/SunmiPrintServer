@@ -170,10 +170,19 @@ class MainActivity : AppCompatActivity(), PrintService.Listener {
         onTcpConnectionChanged(service.isTcpConnected)
     }
 
+    // [connected] reflects only this device's own local printer hardware; a device with no
+    // local printer but a remote_printer_url configured (see PrintService.canPrint) can still
+    // print via relay, so the print form should stay usable there too, just labeled honestly.
     override fun onPrinterConnectionChanged(connected: Boolean) {
-        statusText.text = if (connected) getString(R.string.status_connected) else getString(R.string.status_disconnected)
-        printButton.isEnabled = connected
-        entranceButton.isEnabled = connected
+        val service = printService
+        val canPrint = service?.canPrint ?: connected
+        statusText.text = when {
+            connected -> getString(R.string.status_connected)
+            canPrint -> getString(R.string.status_remote, service?.remotePrinterUrl ?: "")
+            else -> getString(R.string.status_disconnected)
+        }
+        printButton.isEnabled = canPrint
+        entranceButton.isEnabled = canPrint
     }
 
     override fun onHwStatusChanged(status: Int) {

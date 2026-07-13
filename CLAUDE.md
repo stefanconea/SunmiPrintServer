@@ -259,6 +259,14 @@ regardless of what (if anything) `remote_printer_url` is set to; on any other de
 always falls through to the relay as long as that setting points at a reachable Sunmi. Leave
 `remote_printer_url` empty on the Sunmi device itself.
 
+`MainActivity`'s manual print form (the `Print`/`Entrance` buttons and the "Printer connected" /
+"Printer disconnected" status line) is gated on `PrintService.canPrint` (local hardware connected
+OR a remote configured), not raw hardware-connected state — otherwise the form would be uselessly
+disabled on a phone acting purely as a remote client, even though it can genuinely print via
+relay. The status *text* still distinguishes the three real states (`status_connected` /
+`status_remote` / `status_disconnected`) rather than collapsing them, so it stays honest about
+whether this device has a printer physically attached.
+
 Registered via `AndroidManifest.xml` (`<service android:name=".SunmiPrintService"
 android:permission="android.permission.BIND_PRINT_SERVICE">`, a system signature permission so
 only the real print spooler can bind it) + `res/xml/printservice.xml`. Same rule as accessibility
